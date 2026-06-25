@@ -1,0 +1,263 @@
+---
+title: "TFT_eSPI Hello World: Display Text, Colors, and Shapes"
+sidebarTitle: "Hello World"
+description: "Write your first TFT_eSPI sketch — fill the screen, print text with setCursor and println, draw rectangles and circles, and adapt to any display size."
+---
+
+Every TFT_eSPI journey starts with the same milestone: text on a screen. This page walks through the canonical Hello World sketch line by line, explains what each call does, and then shows you how to extend it to draw basic shapes — giving you a solid foundation for every project that follows.
+
+<Note>
+  Before uploading any sketch, you must configure `User_Setup.h` (or select a
+  pre-made file via `User_Setup_Select.h`) to match your specific display
+  driver, resolution, and SPI pin assignments. The library will not function
+  correctly until that step is complete.
+</Note>
+
+## The Complete Sketch
+
+Here is the full Hello World sketch exactly as it runs on an ESP32 or ESP8266 with a 128×160 or 240×320 TFT panel:
+
+```cpp hello_world.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(2);
+  tft.setTextFont(2);
+  tft.println("Hello World!");
+}
+
+void loop() {
+  // Nothing to do here — the message stays on screen
+}
+```
+
+## Step-by-Step Walkthrough
+
+<Steps>
+  <Step title="Include the library and create a display object">
+    ```cpp
+    #include <TFT_eSPI.h>
+
+    TFT_eSPI tft = TFT_eSPI();
+    ```
+
+    Including `TFT_eSPI.h` pulls in the full driver stack. `TFT_eSPI tft = TFT_eSPI()` creates the global display instance named `tft`. All subsequent calls go through this object. The constructor reads your pin and driver settings from `User_Setup.h` at compile time — there are no runtime arguments needed.
+  </Step>
+
+  <Step title="Initialize the display">
+    ```cpp
+    tft.init();
+    ```
+
+    `tft.init()` sends the startup command sequence to the display controller over SPI. It powers on the panel, configures internal registers, and leaves the display ready to receive drawing commands. Call this once in `setup()` before any other drawing function.
+  </Step>
+
+  <Step title="Set the screen rotation">
+    ```cpp
+    tft.setRotation(1);
+    ```
+
+    TFT_eSPI supports four rotation values — `0` through `3` — each rotating the coordinate system 90° clockwise relative to the previous. Rotation `1` puts the display in landscape orientation. Changing this value does not clear the screen; call `fillScreen()` afterward if needed.
+
+    | Value | Orientation        |
+    | ----- | ------------------ |
+    | `0`   | Portrait (default) |
+    | `1`   | Landscape          |
+    | `2`   | Portrait flipped   |
+    | `3`   | Landscape flipped  |
+  </Step>
+
+  <Step title="Clear the screen">
+    ```cpp
+    tft.fillScreen(TFT_BLACK);
+    ```
+
+    `fillScreen()` paints every pixel with the given colour. Using `TFT_BLACK` gives a clean dark canvas. TFT_eSPI defines a full set of named colour constants — `TFT_WHITE`, `TFT_RED`, `TFT_GREEN`, `TFT_BLUE`, `TFT_YELLOW`, `TFT_CYAN`, `TFT_MAGENTA`, `TFT_ORANGE`, and more — all encoded as 16-bit RGB565 values.
+  </Step>
+
+  <Step title="Position the text cursor">
+    ```cpp
+    tft.setCursor(0, 0);
+    ```
+
+    `setCursor(x, y)` sets the pixel position where the next `print()` or `println()` call begins. The origin `(0, 0)` is the top-left corner of the screen in the current rotation. The cursor advances automatically after each character is drawn.
+  </Step>
+
+  <Step title="Set the text colour">
+    ```cpp
+    tft.setTextColor(TFT_WHITE);
+    ```
+
+    This single-argument form draws text in `TFT_WHITE` with a **transparent** background — pixels behind each character are not overwritten. Pass a second argument to set a solid background fill: `tft.setTextColor(TFT_WHITE, TFT_BLACK)` draws white glyphs on a black fill, which is essential when you need to overwrite old text without ghosting.
+  </Step>
+
+  <Step title="Set the text size">
+    ```cpp
+    tft.setTextSize(2);
+    ```
+
+    `setTextSize(n)` scales the active font by integer factor `n`. Size `1` is the native pixel size; size `2` doubles it; size `3` triples it. For clean, sharp text keep to size `1` or `2` — higher integer scaling introduces visible staircase artifacts on small bitmap fonts.
+  </Step>
+
+  <Step title="Select a font">
+    ```cpp
+    tft.setTextFont(2);
+    ```
+
+    TFT_eSPI ships with several built-in fonts numbered `0` through `8`. Font `2` is a clean 16 px proportional font well-suited for general labels and messages. Font `0` is the tiny 6×8 bitmap fallback.
+
+    | Font | Description                        |
+    | ---- | ---------------------------------- |
+    | `0`  | 6×8 Glcd (Adafruit GFX compatible) |
+    | `1`  | 8 px bitmap                        |
+    | `2`  | 16 px smooth                       |
+    | `4`  | 26 px smooth                       |
+    | `6`  | 48 px digit-only                   |
+    | `7`  | 48 px segment-style digits         |
+    | `8`  | 75 px digit-only                   |
+
+    <Note>
+      Fonts 6, 7, and 8 contain only digit characters (`0–9`), a colon, and a
+      period. They are designed for large numeric readouts such as clocks or
+      sensor displays and will render blank rectangles for letters.
+    </Note>
+  </Step>
+
+  <Step title="Print the message">
+    ```cpp
+    tft.println("Hello World!");
+    ```
+
+    `println()` renders the string at the current cursor position and then advances the cursor to the start of the next line, exactly like `Serial.println()`. `print()` works the same way but does not add a newline. Both accept strings, integers, floats, and other standard Arduino types.
+  </Step>
+</Steps>
+
+## Drawing Basic Shapes
+
+Once text is working, you can extend the sketch with rectangles and circles to build simple UI layouts. The following sketch fills the screen, prints a title, and draws a border rectangle plus a centred circle:
+
+```cpp shapes.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // --- Text ---
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextFont(2);
+  tft.setCursor(10, 10);
+  tft.println("Hello World!");
+
+  // --- Rectangle (border only) ---
+  // drawRect(x, y, width, height, colour)
+  tft.drawRect(5, 5, tft.width() - 10, tft.height() - 10, TFT_YELLOW);
+
+  // --- Filled rectangle ---
+  // fillRect(x, y, width, height, colour)
+  tft.fillRect(10, 40, 80, 30, TFT_BLUE);
+
+  // --- Circle (border only) ---
+  // drawCircle(cx, cy, radius, colour)
+  int cx = tft.width()  / 2;
+  int cy = tft.height() / 2;
+  tft.drawCircle(cx, cy, 30, TFT_GREEN);
+
+  // --- Filled circle ---
+  // fillCircle(cx, cy, radius, colour)
+  tft.fillCircle(cx, cy, 15, TFT_RED);
+}
+
+void loop() {}
+```
+
+The shapes API follows a consistent convention: functions prefixed `draw` render an outline only, while functions prefixed `fill` paint the entire interior. Both forms take top-left `(x, y)` for rectangles and centre `(cx, cy)` for circles, followed by the size argument and a 16-bit colour value.
+
+## Using drawString for Precise Positioning
+
+`println` moves the cursor as a side effect, which makes it awkward when you want to place text at exact pixel coordinates. `drawString` is the preferred alternative — it accepts explicit `x` and `y` coordinates and is unaffected by the cursor state:
+
+```cpp draw_string.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextFont(2);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  // Draw text at pixel-precise coordinates
+  tft.drawString("Hello World!", 10, 20);
+}
+
+void loop() {}
+```
+
+<Tip>
+  When using `drawString`, set a background colour with the two-argument form
+  `setTextColor(fg, bg)`. This ensures the background behind each glyph is
+  cleared, preventing ghosting when the text changes later.
+</Tip>
+
+## Common Color Variants
+
+TFT_eSPI's predefined colour constants cover the most common UI colours. You can also construct any 16-bit RGB565 colour using the `tft.color565(r, g, b)` helper:
+
+```cpp colours.ino
+// Named colour constants
+tft.setTextColor(TFT_RED,    TFT_BLACK); tft.drawString("Red text",    10, 20);
+tft.setTextColor(TFT_GREEN,  TFT_BLACK); tft.drawString("Green text",  10, 40);
+tft.setTextColor(TFT_YELLOW, TFT_BLACK); tft.drawString("Yellow text", 10, 60);
+tft.setTextColor(TFT_CYAN,   TFT_BLACK); tft.drawString("Cyan text",   10, 80);
+
+// Custom colour from RGB components (each 0–255)
+uint16_t orange = tft.color565(255, 165, 0);
+tft.setTextColor(orange, TFT_BLACK);
+tft.drawString("Orange text", 10, 100);
+```
+
+## Adapting to Different Display Sizes
+
+Hard-coding pixel coordinates makes sketches fragile when you move to a different panel. Use `tft.width()` and `tft.height()` to write code that adapts automatically:
+
+```cpp adaptive.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  int w = tft.width();   // display width in current rotation
+  int h = tft.height();  // display height in current rotation
+
+  tft.setTextFont(2);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(MC_DATUM); // anchor to Middle-Centre
+
+  // Always centred, regardless of display resolution
+  tft.drawString("Hello World!", w / 2, h / 2);
+
+  // Border that fits any screen
+  tft.drawRect(4, 4, w - 8, h - 8, TFT_YELLOW);
+}
+
+void loop() {}
+```
+
+`tft.width()` and `tft.height()` return the logical pixel dimensions of the screen in its current rotation, so `width > height` in landscape and `height > width` in portrait. Combining them with `MC_DATUM` centres text perfectly on any display without manual offset arithmetic.

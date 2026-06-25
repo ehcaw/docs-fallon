@@ -1,0 +1,377 @@
+---
+title: "Rendering Text and Numbers on TFT Displays"
+sidebarTitle: "Text"
+description: "Draw strings, integers, and floats on TFT displays using TFT_eSPI — configure fonts, colors, datum alignment, padding, size, and wrapping."
+---
+
+TFT_eSPI inherits from Arduino's `Print` class, giving you the familiar `print()` and `println()` stream interface alongside a rich family of dedicated text-drawing methods. You can choose from the built-in numbered bitmap fonts (1–8), load Adafruit GFX-compatible free fonts at compile time, or use smooth anti-aliased TrueType-style fonts at runtime. Text color, background fill, datum alignment, integer size scaling, line wrapping, and padding width are all independently configurable and persist until you change them again.
+
+---
+
+## Text Configuration
+
+### `setTextColor`
+
+Set the foreground glyph color. The two-argument overload also paints a solid background behind each character, which prevents you from needing to erase old text before redrawing updated values.
+
+```cpp
+void setTextColor(uint16_t color);
+void setTextColor(uint16_t fgcolor, uint16_t bgcolor, bool bgfill = false);
+```
+
+<ParamField path="color / fgcolor" type="uint16_t" required>
+  Foreground (glyph) color in RGB565.
+</ParamField>
+<ParamField path="bgcolor" type="uint16_t">
+  Background color painted behind each character cell. Providing this avoids flickering when you update a value on screen.
+</ParamField>
+<ParamField path="bgfill" type="bool">
+  When `true`, the background fill extends across the full padding width set by `setTextPadding()`. Useful for erasing variable-length values cleanly.
+</ParamField>
+
+```cpp setTextColor.ino
+tft.setTextColor(TFT_WHITE);                         // White glyphs, transparent bg
+tft.setTextColor(TFT_WHITE, TFT_BLACK);              // White on black (no flicker)
+tft.setTextColor(TFT_YELLOW, TFT_BLACK, true);       // Yellow on black, padding fill enabled
+```
+
+---
+
+### `setTextSize`
+
+Scale the current font by an integer multiplier. Size `1` renders at the font's native resolution; size `2` doubles each pixel in both axes.
+
+```cpp
+void setTextSize(uint8_t size);
+```
+
+<ParamField path="size" type="uint8_t" required>
+  Integer scale factor. Each step adds 8 pixels to the character height: 1 = 8 px native, 2 = 16 px, 3 = 24 px, etc.
+</ParamField>
+
+```cpp setTextSize.ino
+tft.setTextSize(1);   // Native resolution
+tft.setTextSize(3);   // 3× enlarged
+```
+
+---
+
+### `setTextFont`
+
+Select one of the pre-compiled built-in fonts by number. Fonts 1–3 are proportional GLCD bitmaps; fonts 4, 6, 7, and 8 are Run Length Encoded large fonts best suited for large display values. Font `0` reverts to the default GLCD font.
+
+```cpp
+void setTextFont(uint8_t font);
+```
+
+<ParamField path="font" type="uint8_t" required>
+  Font number (0–8). Values outside the range of fonts enabled in your `User_Setup.h` are silently ignored.
+</ParamField>
+
+```cpp setTextFont.ino
+tft.setTextFont(2);   // Select font 2
+tft.setTextFont(4);   // Select the large RLE font
+tft.setTextFont(0);   // Revert to the default GLCD font
+```
+
+---
+
+### `setTextDatum`
+
+Set the reference point (datum) that the `(x, y)` coordinate passed to `drawString()` and related functions maps to on the rendered text bounding box. This replaces the older `drawCentreString` / `drawRightString` alignment helpers.
+
+```cpp
+void setTextDatum(uint8_t datum);
+```
+
+<ParamField path="datum" type="uint8_t" required>
+  A datum constant selected from the table below.
+</ParamField>
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `TL_DATUM` | 0 | Top-left (default) |
+| `TC_DATUM` | 1 | Top-center |
+| `TR_DATUM` | 2 | Top-right |
+| `ML_DATUM` | 3 | Middle-left |
+| `MC_DATUM` | 4 | Middle-center |
+| `MR_DATUM` | 5 | Middle-right |
+| `BL_DATUM` | 6 | Bottom-left |
+| `BC_DATUM` | 7 | Bottom-center |
+| `BR_DATUM` | 8 | Bottom-right |
+| `L_BASELINE` | 9 | Left baseline |
+| `C_BASELINE` | 10 | Center baseline |
+| `R_BASELINE` | 11 | Right baseline |
+
+```cpp setTextDatum.ino
+tft.setTextDatum(MC_DATUM);   // All subsequent text centers on (x, y)
+tft.drawString("Centered", tft.width() / 2, tft.height() / 2, 2);
+```
+
+---
+
+### `setTextWrap`
+
+Control whether `print()` / `println()` wraps at the right edge and optionally the bottom edge of the display.
+
+```cpp
+void setTextWrap(bool wrapX, bool wrapY = false);
+```
+
+<ParamField path="wrapX" type="bool" required>
+  Wrap at the right display edge when `true`.
+</ParamField>
+<ParamField path="wrapY" type="bool">
+  Wrap back to the top when reaching the bottom edge. Defaults to `false`.
+</ParamField>
+
+```cpp setTextWrap.ino
+tft.setTextWrap(true);          // Wrap at right edge only
+tft.setTextWrap(true, true);    // Wrap at right and bottom
+```
+
+---
+
+### `setTextPadding` and `getTextPadding`
+
+Reserve a fixed-width background fill zone. When you redraw a number or string that might shrink (for example, a counter going from `100` to `9`), the padding erases leftover pixels from the previous render automatically.
+
+```cpp
+void     setTextPadding(uint16_t x_width);
+uint16_t getTextPadding(void);
+```
+
+<ParamField path="x_width" type="uint16_t" required>
+  Reserved background width in pixels. Set to `0` to disable padding. A common pattern is `tft.textWidth("999", font)` to match the widest expected value.
+</ParamField>
+
+```cpp setTextPadding.ino
+tft.setTextPadding(tft.textWidth("100", 4));   // Always erase enough space for "100"
+tft.drawNumber(counter, 10, 60, 4);            // Old digits are erased automatically
+```
+
+---
+
+## Measuring Text
+
+### `textWidth`
+
+Return the rendered pixel width of a string in the given font without drawing anything. Use this for manual layout calculations.
+
+```cpp
+int16_t textWidth(const char *string, uint8_t font);
+int16_t textWidth(const char *string);
+int16_t textWidth(const String& string, uint8_t font);
+int16_t textWidth(const String& string);
+```
+
+```cpp textWidth.ino
+int16_t w = tft.textWidth("Hello", 4);
+// Center the string manually
+tft.drawString("Hello", (tft.width() - w) / 2, 10, 4);
+```
+
+### `fontHeight`
+
+Return the height in pixels of the specified or currently active font.
+
+```cpp
+int16_t fontHeight(uint8_t font);
+int16_t fontHeight(void);
+```
+
+```cpp fontHeight.ino
+int16_t lineH = tft.fontHeight(4);   // Height of font 4 in pixels
+```
+
+---
+
+## Drawing Strings
+
+### `drawString`
+
+Draw a string at `(x, y)` using the current datum for alignment. The `font` parameter is optional — omit it to use the font selected by your last `setTextFont()` call. Returns the rendered width in pixels.
+
+```cpp
+int16_t drawString(const char   *string, int32_t x, int32_t y, uint8_t font);
+int16_t drawString(const char   *string, int32_t x, int32_t y);
+int16_t drawString(const String& string, int32_t x, int32_t y, uint8_t font);
+int16_t drawString(const String& string, int32_t x, int32_t y);
+```
+
+<ParamField path="string" type="const char* / String&" required>
+  Text to render. Accepts both C-string (`char[]`) and Arduino `String` objects.
+</ParamField>
+<ParamField path="x" type="int32_t" required>
+  X coordinate — interpreted according to the active `setTextDatum()`.
+</ParamField>
+<ParamField path="y" type="int32_t" required>
+  Y coordinate.
+</ParamField>
+<ParamField path="font" type="uint8_t">
+  Font number (1–8). Omit to use the currently selected font.
+</ParamField>
+
+```cpp drawString.ino
+tft.drawString("Hello, World!", 10, 30, 2);     // Font 2, top-left datum
+tft.drawString("Current font", 10, 60);         // Uses whatever font is active
+
+String s = "Arduino String";
+tft.drawString(s, 10, 90, 4);
+```
+
+---
+
+### `drawCentreString` and `drawRightString`
+
+<Warning>
+Both functions are deprecated. Use `setTextDatum(TC_DATUM)` or `setTextDatum(TR_DATUM)` combined with `drawString()` instead.
+</Warning>
+
+`drawCentreString` centers a string horizontally on `x`. `drawRightString` right-justifies a string so its right edge aligns with `x`. Both require an explicit font number.
+
+```cpp
+int16_t drawCentreString(const char *string,   int32_t x, int32_t y, uint8_t font);
+int16_t drawCentreString(const String& string, int32_t x, int32_t y, uint8_t font);
+
+int16_t drawRightString(const char *string,   int32_t x, int32_t y, uint8_t font);
+int16_t drawRightString(const String& string, int32_t x, int32_t y, uint8_t font);
+```
+
+```cpp legacyAlign.ino
+tft.drawCentreString("Centered", 160, 10, 2);     // Centered at x = 160
+tft.drawRightString("Right",     319, 30, 2);     // Right edge at x = 319
+```
+
+---
+
+## Drawing Numbers
+
+### `drawNumber`
+
+Draw a `long` integer at the specified position. The current text datum applies. Returns the rendered width in pixels.
+
+```cpp
+int16_t drawNumber(long intNumber, int32_t x, int32_t y, uint8_t font);
+int16_t drawNumber(long intNumber, int32_t x, int32_t y);
+```
+
+<ParamField path="intNumber" type="long" required>Integer value to display.</ParamField>
+<ParamField path="x" type="int32_t" required>X coordinate.</ParamField>
+<ParamField path="y" type="int32_t" required>Y coordinate.</ParamField>
+<ParamField path="font" type="uint8_t">Font number. Omit to use the current font.</ParamField>
+
+```cpp drawNumber.ino
+tft.drawNumber(42,          10, 10, 4);
+tft.drawNumber(1234567890L, 10, 50);       // Current font
+```
+
+### `drawFloat`
+
+Draw a floating-point number with a specified number of decimal places. Returns the rendered width in pixels.
+
+```cpp
+int16_t drawFloat(float floatNumber, uint8_t decimal, int32_t x, int32_t y, uint8_t font);
+int16_t drawFloat(float floatNumber, uint8_t decimal, int32_t x, int32_t y);
+```
+
+<ParamField path="floatNumber" type="float" required>The value to display.</ParamField>
+<ParamField path="decimal" type="uint8_t" required>Number of decimal places (0–9).</ParamField>
+<ParamField path="x" type="int32_t" required>X coordinate.</ParamField>
+<ParamField path="y" type="int32_t" required>Y coordinate.</ParamField>
+<ParamField path="font" type="uint8_t">Font number. Omit to use the current font.</ParamField>
+
+```cpp drawFloat.ino
+tft.drawFloat(3.14159, 3, 10, 10, 2);     // Renders "3.142" in font 2
+tft.drawFloat(23.75,   2, 10, 40, 4);     // Renders "23.75" in font 4
+```
+
+---
+
+## `print()` and `println()`
+
+Because TFT_eSPI inherits Arduino's `Print` interface, any value that `Serial.print()` accepts can go straight to the display at the current cursor position.
+
+```cpp
+void print(val);
+void print(val, format);
+void println(val);
+void println(val, format);
+```
+
+`println()` appends a newline and advances the cursor to the left edge of the next line. Use `tft.setCursor(x, y)` or `tft.setCursor(x, y, font)` before calling `print()` to control the starting position.
+
+<Note>
+When you use `print()` with a background color (`setTextColor(fg, bg)`), TFT_eSPI paints the background cell behind each character, eliminating the need to manually erase old text before redrawing it.
+</Note>
+
+---
+
+## Practical Example — Centered Label on Screen
+
+The following sketch demonstrates the recommended approach to centering a label, displaying sensor values without flicker, and mixing `print()` with `drawString()` on a 240×135 display.
+
+```cpp text_demo.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // ── Centered title ──────────────────────────────────────────────────────
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);                        // Middle-center datum
+  tft.drawString("TFT_eSPI Demo", tft.width() / 2, 20, 4);
+
+  // ── Sensor readout rows using print() ───────────────────────────────────
+  tft.setTextFont(2);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(TL_DATUM);
+  tft.setCursor(0, 50);
+
+  tft.print("Temperature: ");
+  tft.print(23.7, 1);
+  tft.println(" C");
+
+  tft.print("Humidity:    ");
+  tft.print(58);
+  tft.println(" %");
+
+  tft.println("Status: OK");
+
+  // ── Right-aligned version label ─────────────────────────────────────────
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.setTextDatum(BR_DATUM);
+  tft.drawString("v1.0", tft.width() - 4, tft.height() - 4, 2);
+
+  // ── Live counter with padding (no leftover digits) ───────────────────────
+  tft.setTextFont(4);
+  tft.setTextColor(TFT_GREEN, TFT_BLACK);
+  tft.setTextDatum(ML_DATUM);
+  // Reserve enough space for the widest possible value
+  tft.setTextPadding(tft.textWidth("100", 4));
+
+  for (int i = 0; i <= 100; i += 5) {
+    tft.drawNumber(i, 10, 110, 4);   // Old value erased cleanly by padding
+    delay(80);
+  }
+}
+
+void loop() {}
+```
+
+<Tabs>
+  <Tab title="Approach: drawString()">
+    Use `drawString()` with `setTextDatum()` when you need precise positional control — dashboards, labels, and aligned readouts. The datum system means you never have to calculate offsets yourself; just pass the anchor point (such as the screen center) and the library handles the rest.
+  </Tab>
+  <Tab title="Approach: print()">
+    Use `print()` and `println()` for multi-line output that flows naturally downward, similar to a serial terminal. Position the cursor once with `setCursor()`, then stream any number of values. This is ideal for debug overlays and simple status screens.
+  </Tab>
+</Tabs>
+
+<Tip>
+Combine `setTextPadding(tft.textWidth("MAX_VALUE_STRING", font))` with `setTextColor(fg, bg)` to make updating numeric readouts completely flicker-free — no separate `fillRect` erase step required.
+</Tip>

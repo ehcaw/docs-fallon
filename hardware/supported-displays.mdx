@@ -1,0 +1,162 @@
+---
+title: "Supported TFT Display Controllers: Full Reference"
+sidebarTitle: "All Displays"
+description: "TFT_eSPI supports 20+ TFT controllers from 8 manufacturers over SPI and parallel interfaces, with DMA on RP2040, ESP32, ESP32-S3, and STM32."
+---
+
+TFT_eSPI supports an extensive range of TFT display controllers from multiple manufacturers, covering both SPI and parallel bus interfaces across all major target processors. Whether you are building on an ESP32 DevKit, a Raspberry Pi Pico, or an STM32 Nucleo board, there is a compatible display driver ready to use. The library's configuration-based approach means you select your driver and pin assignments once in `User_Setup.h`, and every example sketch runs without modification.
+
+## Processor and Interface Compatibility
+
+Not every interface type is available on every processor. The table below summarises which combinations of bus interface and DMA support are available for each supported processor family.
+
+| Processor    | 4-wire SPI | 8-bit Parallel | 16-bit Parallel | DMA Support    |
+| ------------ | :--------: | :------------: | :-------------: | :------------: |
+| RP2040       | ✅          | ✅              | ✅               | ✅ All          |
+| ESP32        | ✅          | ✅              | ❌               | ✅ SPI only     |
+| ESP32-C3     | ✅          | ❌              | ❌               | ❌              |
+| ESP32-S2     | ✅          | ❌              | ❌               | ❌              |
+| ESP32-S3     | ✅          | ✅              | ❌               | ✅ SPI only     |
+| ESP8266      | ✅          | ❌              | ❌               | ❌              |
+| STM32Fxxx    | ✅          | ✅              | ❌               | ✅ SPI only     |
+| Other 32-bit | ✅          | ❌              | ❌               | ❌              |
+
+<Note>
+  For non-optimised 32-bit processors, the library falls back to slower generic
+  Arduino SPI calls. High-clock platforms such as Teensy 3.x/4.x still deliver
+  excellent performance through this path.
+</Note>
+
+**4-wire SPI** requires the display to expose a `Data/Command` control line alongside the standard SPI signals. This pin may be labelled `DC`, `RS`, or `A0` depending on the display module manufacturer.
+
+**8-bit parallel** (UNO-format mcufriend shields, for example) is **not** supported on the ESP8266 due to insufficient GPIO pins. These shields work well on STM32Fxxx Nucleo 64/144 boards and on the UNO-format ESP32.
+
+## Supported Display Controllers
+
+TFT_eSPI includes optimised drivers for over twenty display controllers from eight manufacturers. The **ILI9341** and **ST7796** SPI-based displays are the recommended starting points for new projects — both are widely available, well documented, and well exercised in the community.
+
+<CardGroup cols={2}>
+  <Card title="ILI9341" icon="display" href="/hardware/ili9341">
+    The most popular controller in the ecosystem. 240×320, 262K colours, SPI.
+    Recommended first choice for new projects.
+  </Card>
+  <Card title="R61581" icon="display" href="/hardware/r61581">
+    RenesasSP 320×480 controller with MIPI DBI Type B/C and parallel interface
+    support.
+  </Card>
+  <Card title="RM68120" icon="display" href="/hardware/rm68120">
+    Raydium WVGA controller supporting up to 480×864 resolution with 16.7M
+    colours.
+  </Card>
+  <Card title="ST7796" icon="display" href="/hardware/supported-displays">
+    Sitronix 320×480 SPI/parallel controller. Recommended alongside ILI9341 as
+    a starting point.
+  </Card>
+</CardGroup>
+
+### GalaxyCore
+
+| Controller | Resolution | Colours | Notes                  |
+| ---------- | ---------- | ------- | ---------------------- |
+| GC9A01     | 240×240    | 65K RGB | Round display, SPI     |
+
+### ILI Technology Corp. (Ilitek)
+
+| Controller | Resolution | Colours | Notes                                                       |
+| ---------- | ---------- | ------- | ----------------------------------------------------------- |
+| ILI9163    | 128×160    | 65K     | Compact SPI display                                         |
+| ILI9225    | 176×220    | 65K     | SPI interface                                               |
+| ILI9341    | 240×320    | 262K    | **Recommended starting point**, SPI                         |
+| ILI9342    | 320×240    | 262K    | Landscape variant of ILI9341                                |
+| ILI9481    | 320×480    | 262K    | DMA not supported with SPI                                  |
+| ILI9486    | 320×480    | 262K    | DMA not supported with SPI; Waveshare RPi variant supported |
+| ILI9488    | 320×480    | 262K    | DMA not supported with SPI                                  |
+
+<Warning>
+  ILI9481, ILI9486, and ILI9488 do **not** support DMA when used over SPI. If
+  DMA throughput is important for your project, choose ILI9341 or ST7796
+  instead.
+</Warning>
+
+### Himax
+
+| Controller | Resolution | Colours | Notes                                  |
+| ---------- | ---------- | ------- | -------------------------------------- |
+| HX8357B    | 320×480    | 262K    | SPI and parallel                       |
+| HX8357C    | 320×480    | 262K    | 16-bit parallel tested with RP2040     |
+| HX8357D    | 320×480    | 262K    | SPI and parallel                       |
+
+### RenesasSP
+
+| Controller | Resolution | Colours | Notes                       |
+| ---------- | ---------- | ------- | --------------------------- |
+| R61581     | 320×480    | 262K    | MIPI DBI Type B/C, parallel |
+
+### Raydium
+
+| Controller | Resolution    | Colours | Notes                          |
+| ---------- | ------------- | ------- | ------------------------------ |
+| RM68120    | Up to 480×864 | 16.7M   | Support added but **untested** |
+| RM68140    | 480×320       | 16.7M   | Parallel interface             |
+
+### Samsung
+
+| Controller | Resolution | Colours | Notes         |
+| ---------- | ---------- | ------- | ------------- |
+| S6D02A1    | 128×160    | 65K     | SPI interface |
+
+### Solomon Systech
+
+| Controller | Resolution    | Colours | Notes                                       |
+| ---------- | ------------- | ------- | ------------------------------------------- |
+| SSD1351    | 128×128       | 65K     | OLED, SPI                                   |
+| SSD1963    | Up to 800×480 | 262K    | **Parallel interface only** — no SPI support |
+
+<Warning>
+  The SSD1963 controller supports only the parallel bus interface. It cannot be
+  used with SPI-only microcontroller boards such as the ESP8266.
+</Warning>
+
+### Sitronix
+
+| Controller | Resolution | Colours | Notes                                      |
+| ---------- | ---------- | ------- | ------------------------------------------ |
+| ST7735     | 128×160    | 65K     | SPI, common in small modules               |
+| ST7789     | 240×320    | 65K     | SPI, used on many compact modules          |
+| ST7796     | 320×480    | 65K     | **Recommended starting point**, SPI and parallel |
+
+## Raspberry Pi Display Support
+
+TFT_eSPI supports certain Raspberry Pi–format TFT displays built on the **ILI9486** or **ST7796** driver chips, providing a 480×320 pixel screen. The ILI9486 RPi variant must be the Waveshare design, which uses a 16-bit serial interface built around 74HC04, 74HC4040, and 2×74HC4094 logic chips.
+
+<Tip>
+  If you are looking for a Raspberry Pi HAT-compatible display, target the
+  Waveshare ILI9486 variant specifically — it has a known-working
+  `User_Setup.h` configuration included with the library. Other RPi display
+  designs vary between manufacturers and may not be pin-compatible.
+</Tip>
+
+<Note>
+  Not all Raspberry Pi displays are interchangeable — design variations between
+  manufacturers mean some will not work with TFT_eSPI. Purchasing an RPi
+  display solely for use with this library is **not** recommended without first
+  verifying compatibility.
+</Note>
+
+## Touch Screen Support
+
+The XPT2046 resistive touch controller is built into TFT_eSPI and can be used alongside any SPI display. For parallel-interface displays, third-party touch libraries can be integrated separately.
+
+## Further Reading
+
+<CardGroup cols={3}>
+  <Card title="ILI9341 Setup Guide" icon="microchip" href="/hardware/ili9341">
+    Full wiring table and User_Setup.h configuration for the ILI9341.
+  </Card>
+  <Card title="R61581 Setup Guide" icon="microchip" href="/hardware/r61581">
+    Configuration and datasheet details for the RenesasSP R61581.
+  </Card>
+  <Card title="RM68120 Setup Guide" icon="microchip" href="/hardware/rm68120">
+    Configuration notes and datasheet features for the Raydium RM68120.
+  </Card>
+</CardGroup>

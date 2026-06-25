@@ -1,0 +1,442 @@
+---
+title: "TFT_eSPI Color Conversion, Pixel, and Image Methods"
+sidebarTitle: "Color & Pixel"
+description: "Reference for TFT_eSPI colour conversion, pixel reading, alpha blending, byte-swap, image pushing, pivot, and readRect/pushRect buffer methods."
+---
+
+TFT_eSPI represents colours internally as 16-bit **RGB565** values — 5 bits for red, 6 bits for green, and 5 bits for blue — packed into a single `uint16_t`. This format is the native pixel format for most SPI TFT controllers and minimises bus bandwidth compared to 24-bit RGB. The library provides a suite of conversion helpers for moving between RGB565, 8-bit RGB332, 24-bit RGB888, and alpha-blended composites. You can also read individual pixels back from the display, push raw pixel buffers or palettized images, and control byte-swap behaviour for data originating on little-endian systems.
+
+## RGB565 Format Reference
+
+```
+Bit  15  14  13  12  11 | 10   9   8   7   6   5 |  4   3   2   1   0
+     R4  R3  R2  R1  R0 | G5  G4  G3  G2  G1  G0 | B4  B3  B2  B1  B0
+     ← 5 red bits →       ← 6 green bits →          ← 5 blue bits →
+```
+
+To create an RGB565 value from 8-bit channel values: `((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)`. Use `color565()` for a clean helper.
+
+## Method Summary
+
+| Method | Signature | Returns | Description |
+|---|---|---|---|
+| `color565()` | `color565(r, g, b)` | `uint16_t` | Pack RGB to RGB565 |
+| `color8to16()` | `color8to16(color332)` | `uint16_t` | RGB332 → RGB565 |
+| `color16to8()` | `color16to8(color565)` | `uint8_t` | RGB565 → RGB332 |
+| `color16to24()` | `color16to24(color565)` | `uint32_t` | RGB565 → RGB888 |
+| `color24to16()` | `color24to16(color888)` | `uint32_t` | RGB888 → RGB565 |
+| `alphaBlend()` | `alphaBlend(alpha, fgc, bgc[, dither])` | `uint16_t` | Blend two RGB565 colours |
+| `alphaBlend24()` | `alphaBlend24(alpha, fgc, bgc[, dither])` | `uint32_t` | Blend two RGB888 colours |
+| `readPixel()` | `readPixel(x, y)` | `uint16_t` | Read pixel from display |
+| `readRect()` | `readRect(x, y, w, h, data)` | `void` | Read rectangle into buffer |
+| `pushRect()` | `pushRect(x, y, w, h, data)` | `void` | Write buffer to display |
+| `pushImage()` | `pushImage(x, y, w, h, data[, transparent])` | `void` | Push image to display |
+| `pushMaskedImage()` | `pushMaskedImage(x, y, w, h, img, mask)` | `void` | Push image with alpha mask |
+| `setBitmapColor()` | `setBitmapColor(fg, bg)` | `void` | Set bitmap draw colours |
+| `setSwapBytes()` | `setSwapBytes(swap)` | `void` | Control byte-swap on push |
+| `getSwapBytes()` | `getSwapBytes(void)` | `bool` | Read byte-swap setting |
+| `setPivot()` | `setPivot(x, y)` | `void` | Set sprite pivot point |
+| `getPivotX()` | `getPivotX(void)` | `int16_t` | Read pivot X |
+| `getPivotY()` | `getPivotY(void)` | `int16_t` | Read pivot Y |
+
+---
+
+## color565() — Pack RGB Components to RGB565
+
+```cpp
+uint16_t color565(uint8_t red, uint8_t green, uint8_t blue)
+```
+
+Converts 8-bit-per-channel RGB values to a 16-bit RGB565 colour. The upper bits of the 8-bit values are kept and the lower bits are discarded, so there is a small rounding loss. The returned value can be used directly in any TFT_eSPI drawing call.
+
+<ParamField path="red" type="uint8_t">Red channel intensity (0–255).</ParamField>
+<ParamField path="green" type="uint8_t">Green channel intensity (0–255).</ParamField>
+<ParamField path="blue" type="uint8_t">Blue channel intensity (0–255).</ParamField>
+
+<ResponseField name="return" type="uint16_t">
+  Packed RGB565 colour value.
+</ResponseField>
+
+```cpp title="Creating colours from RGB values"
+uint16_t orange  = tft.color565(255, 165,   0); // HTML orange
+uint16_t skyBlue = tft.color565(135, 206, 235); // sky blue
+
+tft.fillRect(0,  0, 160, 240, orange);
+tft.fillRect(160, 0, 160, 240, skyBlue);
+```
+
+---
+
+## color8to16() — RGB332 to RGB565
+
+```cpp
+uint16_t color8to16(uint8_t color332)
+```
+
+Expands an 8-bit RGB332 colour (3 red bits, 3 green bits, 2 blue bits) to 16-bit RGB565 by replicating the most significant bits into the least significant positions.
+
+<ParamField path="color332" type="uint8_t">8-bit RGB332 packed colour value.</ParamField>
+
+<ResponseField name="return" type="uint16_t">
+  Equivalent RGB565 colour.
+</ResponseField>
+
+```cpp title="Expanding an 8-bit colour"
+uint8_t c8 = 0b11100011;        // R=7, G=0, B=3 in RGB332
+uint16_t c16 = tft.color8to16(c8);
+```
+
+---
+
+## color16to8() — RGB565 to RGB332
+
+```cpp
+uint8_t color16to8(uint16_t color565)
+```
+
+Reduces a 16-bit RGB565 colour to 8-bit RGB332 by truncating the least significant bits. This conversion is lossy — colour fidelity is reduced, especially in the blue channel which loses 3 bits.
+
+<ParamField path="color565" type="uint16_t">16-bit RGB565 colour to convert.</ParamField>
+
+<ResponseField name="return" type="uint8_t">
+  8-bit RGB332 approximation.
+</ResponseField>
+
+---
+
+## color16to24() — RGB565 to RGB888
+
+```cpp
+uint32_t color16to24(uint16_t color565)
+```
+
+Expands a 16-bit RGB565 colour to a 24-bit RGB888 value stored in the lower 3 bytes of a `uint32_t`. The upper byte is always 0.
+
+<ParamField path="color565" type="uint16_t">16-bit RGB565 colour.</ParamField>
+
+<ResponseField name="return" type="uint32_t">
+  24-bit RGB888 value (bits 23–0 contain the colour; bits 31–24 are 0).
+</ResponseField>
+
+```cpp title="Expanding to 24-bit for CSS or HTML"
+uint32_t rgb888 = tft.color16to24(TFT_CYAN); // → 0x0000FFFF
+Serial.print("#");
+Serial.println(rgb888, HEX);
+```
+
+---
+
+## color24to16() — RGB888 to RGB565
+
+```cpp
+uint32_t color24to16(uint32_t color888)
+```
+
+Converts a 24-bit RGB888 colour to 16-bit RGB565. The upper byte of `color888` is ignored. The result is returned in the lower 16 bits of the `uint32_t`.
+
+<ParamField path="color888" type="uint32_t">24-bit RGB888 colour value. The upper byte is ignored.</ParamField>
+
+<ResponseField name="return" type="uint32_t">
+  The RGB565 value in the lower 16 bits.
+</ResponseField>
+
+```cpp title="Converting a 24-bit colour"
+uint32_t c565 = tft.color24to16(0xFF8C00); // dark orange → RGB565
+tft.fillRect(0, 0, 50, 50, (uint16_t)c565);
+```
+
+---
+
+## alphaBlend() — Alpha Composite Two RGB565 Colours
+
+```cpp
+// Without dithering
+uint16_t alphaBlend(uint8_t alpha, uint16_t fgc, uint16_t bgc)
+
+// With optional dithering
+uint16_t alphaBlend(uint8_t alpha, uint16_t fgc, uint16_t bgc, uint8_t dither)
+```
+
+Blends foreground colour `fgc` over background colour `bgc` using an alpha value in the range 0–255. At `alpha = 0` the result is fully `bgc`; at `alpha = 255` the result is fully `fgc`. The dithered overload adds small noise to reduce visible colour banding at the limited 5/6-bit precision of RGB565.
+
+<ParamField path="alpha" type="uint8_t">Blend factor (0 = fully background, 255 = fully foreground).</ParamField>
+<ParamField path="fgc" type="uint16_t">Foreground RGB565 colour.</ParamField>
+<ParamField path="bgc" type="uint16_t">Background RGB565 colour.</ParamField>
+<ParamField path="dither" type="uint8_t">Dither amplitude (overload 2 only). Higher values reduce colour banding at the cost of noise.</ParamField>
+
+<ResponseField name="return" type="uint16_t">
+  Blended RGB565 colour.
+</ResponseField>
+
+```cpp title="Alpha blending two colours"
+// 50% blend: red over black → dark red
+uint16_t blended = tft.alphaBlend(128, TFT_RED, TFT_BLACK);
+tft.drawPixel(50, 50, blended);
+
+// Smooth fade from white to navy over 256 steps
+for (int i = 0; i < 256; i++) {
+  uint16_t c = tft.alphaBlend(i, TFT_NAVY, TFT_WHITE);
+  tft.drawFastVLine(i, 0, 20, c);
+}
+```
+
+---
+
+## alphaBlend24() — Alpha Composite Two RGB888 Colours
+
+```cpp
+uint32_t alphaBlend24(uint8_t alpha, uint32_t fgc, uint32_t bgc, uint8_t dither = 0)
+```
+
+Like `alphaBlend()` but operates on 24-bit RGB888 colours and returns a 24-bit result with higher fidelity.
+
+<ParamField path="alpha" type="uint8_t">Blend factor (0–255).</ParamField>
+<ParamField path="fgc" type="uint32_t">Foreground 24-bit RGB888 colour.</ParamField>
+<ParamField path="bgc" type="uint32_t">Background 24-bit RGB888 colour.</ParamField>
+<ParamField path="dither" type="uint8_t">Dither amplitude. Default 0.</ParamField>
+
+<ResponseField name="return" type="uint32_t">
+  Blended 24-bit RGB888 colour.
+</ResponseField>
+
+---
+
+## setBitmapColor() — Set Bitmap Foreground/Background
+
+```cpp
+void setBitmapColor(uint16_t fgcolor, uint16_t bgcolor)
+```
+
+Sets the foreground and background colours used when rendering 1-bit bitmaps with `drawBitmap()` and `drawXBitmap()`. These values are stored in the public members `bitmap_fg` and `bitmap_bg` and can also be set directly.
+
+<ParamField path="fgcolor" type="uint16_t">Colour for set (1) bits.</ParamField>
+<ParamField path="bgcolor" type="uint16_t">Colour for clear (0) bits.</ParamField>
+
+```cpp title="Setting bitmap colours"
+tft.setBitmapColor(TFT_WHITE, TFT_BLACK);
+```
+
+---
+
+## setSwapBytes() / getSwapBytes() — Byte Order for Image Data
+
+```cpp
+void setSwapBytes(bool swap)
+bool getSwapBytes(void)
+```
+
+Controls whether byte pairs in image data passed to `pushImage()` are swapped before rendering. This corrects the byte order for images stored in little-endian format (most BMP files on ESP32/ESP8266) versus the big-endian order required by the SPI display controller.
+
+<ParamField path="swap" type="bool">`true` to swap bytes; `false` for native byte order.</ParamField>
+
+<ResponseField name="return (getSwapBytes)" type="bool">
+  Current swap-bytes setting.
+</ResponseField>
+
+```cpp title="Enabling byte swap for image data"
+tft.setSwapBytes(true); // images stored in little-endian order (most common)
+```
+
+---
+
+## readPixel() — Read a Pixel from the Display
+
+```cpp
+uint16_t readPixel(int32_t x, int32_t y)
+```
+
+Reads the RGB565 colour value of a single pixel from the display hardware. This requires the MISO (SDO) line to be connected and configured in `User_Setup.h`.
+
+<ParamField path="x" type="int32_t">X coordinate of the pixel to read.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the pixel to read.</ParamField>
+
+<ResponseField name="return" type="uint16_t">
+  The pixel colour in RGB565 format.
+</ResponseField>
+
+```cpp title="Reading a pixel back from the display"
+uint16_t px = tft.readPixel(60, 40);
+Serial.print("Pixel colour: 0x");
+Serial.println(px, HEX);
+```
+
+---
+
+## readRect() — Read a Pixel Rectangle into a Buffer
+
+```cpp
+void readRect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data)
+```
+
+Reads a rectangular block of RGB565 pixels from the display into a caller-supplied buffer. Requires MISO to be connected. The buffer must be at least `w * h` `uint16_t` elements.
+
+<ParamField path="x" type="int32_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int32_t">Width of the rectangle in pixels.</ParamField>
+<ParamField path="h" type="int32_t">Height of the rectangle in pixels.</ParamField>
+<ParamField path="data" type="uint16_t *">Buffer to receive `w × h` RGB565 values (caller-allocated).</ParamField>
+
+```cpp title="Saving and restoring a display region"
+uint16_t buf[100 * 80]; // 100×80 pixel scratch buffer
+tft.readRect(10, 10, 100, 80, buf);  // save region
+// ... draw over it ...
+tft.pushRect(10, 10, 100, 80, buf);  // restore region
+```
+
+---
+
+## pushRect() — Write a Pixel Rectangle from a Buffer
+
+```cpp
+void pushRect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data)
+```
+
+Pushes a buffer of `w × h` RGB565 pixels to the display at position `(x, y)`. This is the fastest way to blit an in-memory frame or sprite without DMA.
+
+<ParamField path="x" type="int32_t">X destination coordinate.</ParamField>
+<ParamField path="y" type="int32_t">Y destination coordinate.</ParamField>
+<ParamField path="w" type="int32_t">Rectangle width.</ParamField>
+<ParamField path="h" type="int32_t">Rectangle height.</ParamField>
+<ParamField path="data" type="uint16_t *">Source buffer of `w × h` RGB565 values.</ParamField>
+
+```cpp title="Blitting a pixel buffer"
+tft.pushRect(10, 10, 100, 80, buf);
+```
+
+---
+
+## pushImage() — Push Image with Optional Transparency
+
+```cpp
+// 16-bit RGB565 image, no transparency
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data)
+
+// 16-bit RGB565 image with transparent colour key
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               uint16_t *data, uint16_t transparent)
+
+// Const data variant (PROGMEM-safe)
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               const uint16_t *data, uint16_t transparent)
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               const uint16_t *data)
+
+// 8-bit palette image
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               uint8_t *data, bool bpp8 = true, uint16_t *cmap = nullptr)
+
+// 8-bit palette image with transparent index
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               uint8_t *data, uint8_t transparent,
+               bool bpp8 = true, uint16_t *cmap = nullptr)
+```
+
+Pushes a rectangular image to the display. Multiple overloads support 16-bit RGB565, 8-bit palettized (with optional colour map), and transparent-colour-key variants. Call `setSwapBytes(true)` before pushing images stored in little-endian byte order.
+
+<ParamField path="x" type="int32_t">X destination coordinate.</ParamField>
+<ParamField path="y" type="int32_t">Y destination coordinate.</ParamField>
+<ParamField path="w" type="int32_t">Image width in pixels.</ParamField>
+<ParamField path="h" type="int32_t">Image height in pixels.</ParamField>
+<ParamField path="data" type="uint16_t * or uint8_t *">Pointer to pixel data.</ParamField>
+<ParamField path="transparent" type="uint16_t or uint8_t">Transparent colour key. Pixels matching this value are not rendered to the display.</ParamField>
+<ParamField path="bpp8" type="bool">When `true`, each `uint8_t` is a palette index into `cmap`; when `false`, it is treated as raw RGB332.</ParamField>
+<ParamField path="cmap" type="uint16_t *">Pointer to a 256-entry RGB565 colour-map array. `nullptr` uses a default map.</ParamField>
+
+```cpp title="Pushing a full-screen RGB565 image"
+extern const uint16_t myImage[240 * 320];
+tft.setSwapBytes(true);   // correct for little-endian image files
+tft.pushImage(0, 0, 240, 320, myImage);
+```
+
+```cpp title="Pushing an image with a transparent colour key"
+extern const uint16_t sprite[32 * 32];
+// TFT_TRANSPARENT (0x0120) pixels will not be written
+tft.pushImage(x, y, 32, 32, sprite, TFT_TRANSPARENT);
+```
+
+---
+
+## pushMaskedImage() — Push Image with Alpha Mask
+
+```cpp
+void pushMaskedImage(int32_t x, int32_t y, int32_t w, int32_t h,
+                     uint16_t *img, uint8_t *mask)
+```
+
+Pushes a 16-bit image to the display, applying a 1-bit-per-pixel mask. Pixels where the mask bit is 0 are not written to the display, allowing non-rectangular image sprites.
+
+<ParamField path="x" type="int32_t">X destination coordinate.</ParamField>
+<ParamField path="y" type="int32_t">Y destination coordinate.</ParamField>
+<ParamField path="w" type="int32_t">Image width in pixels.</ParamField>
+<ParamField path="h" type="int32_t">Image height in pixels.</ParamField>
+<ParamField path="img" type="uint16_t *">RGB565 pixel data.</ParamField>
+<ParamField path="mask" type="uint8_t *">1-bit mask data (bit = 1 renders the pixel, bit = 0 skips it).</ParamField>
+
+---
+
+## setPivot() / getPivotX() / getPivotY() — Sprite Pivot Point
+
+```cpp
+void    setPivot(int16_t x, int16_t y)
+int16_t getPivotX(void)
+int16_t getPivotY(void)
+```
+
+Sets or reads the pivot point used when pushing rotated sprites to the TFT. The pivot is expressed in TFT screen coordinates and defines the anchor around which the sprite rotates.
+
+<ParamField path="x" type="int16_t">X coordinate of the pivot point in screen coordinates.</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate of the pivot point in screen coordinates.</ParamField>
+
+<ResponseField name="return (getPivotX/Y)" type="int16_t">
+  Current pivot X or Y coordinate.
+</ResponseField>
+
+```cpp title="Setting a centre pivot for rotation"
+tft.setPivot(tft.width() / 2, tft.height() / 2);
+int16_t px = tft.getPivotX();
+int16_t py = tft.getPivotY();
+```
+
+---
+
+## Complete Example
+
+```cpp title="Color conversion and image push"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Build a palette of custom colours
+  uint16_t coral    = tft.color565(255, 127, 80);
+  uint16_t lavender = tft.color565(230, 230, 250);
+  uint16_t gold     = tft.color565(255, 215,  0);
+
+  tft.fillRect(  0, 0, 106, 240, coral);
+  tft.fillRect(107, 0, 107, 240, lavender);
+  tft.fillRect(214, 0, 106, 240, gold);
+
+  // Demonstrate alpha blending across a gradient
+  for (int i = 0; i < 256; i++) {
+    uint16_t c = tft.alphaBlend((uint8_t)i, TFT_WHITE, TFT_BLACK);
+    tft.drawFastVLine(i, 220, 20, c);
+  }
+
+  // Read a pixel back and print it
+  uint16_t px = tft.readPixel(53, 120);
+  Serial.print("Centre-left pixel (coral): 0x");
+  Serial.println(px, HEX);
+
+  // Round-trip through RGB888
+  uint32_t as24 = tft.color16to24(coral);
+  uint32_t back = tft.color24to16(as24);
+  Serial.print("Round-trip RGB565: 0x");
+  Serial.println((uint16_t)back, HEX);
+}
+
+void loop() {}
+```

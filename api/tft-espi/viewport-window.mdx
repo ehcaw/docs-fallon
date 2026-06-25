@@ -1,0 +1,343 @@
+---
+title: "TFT_eSPI Viewport, Window, and Address Clipping Methods"
+sidebarTitle: "Viewport & Window"
+description: "Complete reference for TFT_eSPI viewport clipping, resetViewport, checkViewport, frameViewport, setAddrWindow, setWindow, and clip helpers."
+---
+
+TFT_eSPI version 2.x introduced a viewport and clipping system — signalled by `TFT_ESPI_FEATURES` bit 0 being set — that lets you constrain all drawing operations to a rectangular sub-region of the display. Any pixel written outside the viewport is silently discarded with no performance penalty beyond the check itself. Below the viewport layer is the address-window layer: raw hardware window commands that set the pixel RAM pointer before a burst write. Both layers are documented here, along with helpers for checking rectangle intersection and drawing a coloured border around the active viewport.
+
+## Method Summary
+
+| Method | Signature | Returns | Description |
+|---|---|---|---|
+| `setViewport()` | `setViewport(x, y, w, h[, vpDatum])` | `void` | Define the clipping region |
+| `resetViewport()` | `resetViewport(void)` | `void` | Remove viewport clipping |
+| `checkViewport()` | `checkViewport(x, y, w, h)` | `bool` | Test rectangle intersection |
+| `getViewportX()` | `getViewportX(void)` | `int32_t` | Read viewport X position |
+| `getViewportY()` | `getViewportY(void)` | `int32_t` | Read viewport Y position |
+| `getViewportWidth()` | `getViewportWidth(void)` | `int32_t` | Read viewport width |
+| `getViewportHeight()` | `getViewportHeight(void)` | `int32_t` | Read viewport height |
+| `getViewportDatum()` | `getViewportDatum(void)` | `bool` | Read vpDatum setting |
+| `frameViewport()` | `frameViewport(color, w)` | `void` | Draw border around viewport |
+| `setWindow()` | `setWindow(xs, ys, xe, ye)` | `void` | Set HW pixel window (end coords) |
+| `setAddrWindow()` | `setAddrWindow(xs, ys, w, h)` | `void` | Set HW pixel window (w/h form) |
+| `clipAddrWindow()` | `clipAddrWindow(x, y, w, h)` | `bool` | Clip window to display bounds |
+| `clipWindow()` | `clipWindow(xs, ys, xe, ye)` | `bool` | Clip end-coord window to bounds |
+
+---
+
+## setViewport() — Define the Active Clipping Region
+
+```cpp
+void setViewport(int32_t x, int32_t y, int32_t w, int32_t h, bool vpDatum = true)
+```
+
+Restricts all subsequent drawing operations to the rectangular region defined by `(x, y, w, h)`. Pixels written outside this region are discarded. When `vpDatum` is `true`, the coordinate origin `(0, 0)` is relocated to the top-left corner of the viewport, so self-contained widget code can always draw from `(0, 0)` regardless of where on the physical screen it is placed.
+
+<ParamField path="x" type="int32_t">X position of the viewport top-left corner in **screen** coordinates.</ParamField>
+<ParamField path="y" type="int32_t">Y position of the viewport top-left corner in **screen** coordinates.</ParamField>
+<ParamField path="w" type="int32_t">Viewport width in pixels.</ParamField>
+<ParamField path="h" type="int32_t">Viewport height in pixels.</ParamField>
+<ParamField path="vpDatum" type="bool">
+  When `true` (default), drawing coordinates are relative to the viewport top-left corner — `(0, 0)` maps to the viewport origin on screen. When `false`, screen coordinates are used but pixels outside the viewport are still clipped.
+</ParamField>
+
+```cpp title="Restricting drawing to a quarter of the screen"
+// Restrict to the top-left 160×120 quarter
+tft.setViewport(0, 0, 160, 120);
+tft.fillScreen(TFT_NAVY);       // only fills the viewport area
+tft.drawRect(0, 0, 160, 120, TFT_WHITE); // border sits at viewport edge
+```
+
+```cpp title="Two panels sharing the same draw routine"
+// Left panel — coordinates relative to (0, 0) = screen (0, 0)
+tft.setViewport(0, 0, 160, 240, true);
+drawWidget();
+
+// Right panel — same draw code, coordinates now relative to screen (160, 0)
+tft.setViewport(160, 0, 160, 240, true);
+drawWidget();
+
+tft.resetViewport(); // restore full-screen drawing
+```
+
+<Tip>
+  With `vpDatum = true`, each widget or panel can be written to assume `(0, 0)` is its own top-left corner. You simply reposition the viewport before calling the widget routine — no coordinate offsets in the widget code itself.
+</Tip>
+
+---
+
+## resetViewport() — Remove Viewport Clipping
+
+```cpp
+void resetViewport(void)
+```
+
+Resets the viewport to the full display area and clears the datum offset. After calling this, drawing operations span the entire screen again and coordinates are interpreted as screen coordinates.
+
+```cpp title="Restoring full-screen drawing"
+tft.resetViewport();
+tft.fillScreen(TFT_BLACK); // clears the whole screen
+```
+
+---
+
+## checkViewport() — Test Rectangle Intersection
+
+```cpp
+bool checkViewport(int32_t x, int32_t y, int32_t w, int32_t h)
+```
+
+Returns `true` if the rectangle `(x, y, w, h)` intersects the current viewport. Use this as a fast early-exit guard in render loops — if the target bounding box does not intersect the viewport, the draw call can be skipped entirely without sending any SPI data.
+
+<ParamField path="x" type="int32_t">X coordinate of the test rectangle (screen or viewport-relative, consistent with the current datum setting).</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the test rectangle.</ParamField>
+<ParamField path="w" type="int32_t">Width of the test rectangle.</ParamField>
+<ParamField path="h" type="int32_t">Height of the test rectangle.</ParamField>
+
+<ResponseField name="return" type="bool">
+  `true` if the rectangle overlaps the viewport; `false` otherwise.
+</ResponseField>
+
+```cpp title="Skipping off-screen draw calls"
+if (tft.checkViewport(spriteX, spriteY, spriteW, spriteH)) {
+  sprite.pushSprite(spriteX, spriteY);
+}
+```
+
+---
+
+## getViewportX() / getViewportY() — Read Viewport Position
+
+```cpp
+int32_t getViewportX(void)
+int32_t getViewportY(void)
+```
+
+Return the screen-coordinate position of the viewport's top-left corner, regardless of the current `vpDatum` setting.
+
+<ResponseField name="return" type="int32_t">
+  Viewport X or Y position in screen pixels.
+</ResponseField>
+
+```cpp title="Reading the viewport position"
+int32_t vx = tft.getViewportX();
+int32_t vy = tft.getViewportY();
+Serial.print("Viewport at: ");
+Serial.print(vx); Serial.print(", "); Serial.println(vy);
+```
+
+---
+
+## getViewportWidth() / getViewportHeight() — Read Viewport Size
+
+```cpp
+int32_t getViewportWidth(void)
+int32_t getViewportHeight(void)
+```
+
+Return the current viewport width and height in pixels.
+
+<ResponseField name="return" type="int32_t">
+  Viewport width or height in pixels.
+</ResponseField>
+
+```cpp title="Drawing a border around the current viewport"
+int32_t vw = tft.getViewportWidth();
+int32_t vh = tft.getViewportHeight();
+tft.drawRect(0, 0, vw, vh, TFT_RED); // inner border using viewport-relative coords
+```
+
+---
+
+## getViewportDatum() — Read Datum Setting
+
+```cpp
+bool getViewportDatum(void)
+```
+
+Returns the `vpDatum` flag set by the most recent `setViewport()` call.
+
+<ResponseField name="return" type="bool">
+  `true` if drawing coordinates are relative to the viewport origin; `false` for screen coordinates.
+</ResponseField>
+
+---
+
+## frameViewport() — Draw a Border Around the Viewport
+
+```cpp
+void frameViewport(uint16_t color, int32_t w)
+```
+
+Draws a coloured rectangular border of thickness `w` pixels along the inner edge of the current viewport. This is a convenience wrapper equivalent to drawing four filled rectangles at the viewport perimeter. The border is drawn using viewport-relative coordinates regardless of the `vpDatum` setting.
+
+<ParamField path="color" type="uint16_t">Border colour (RGB565 or `TFT_*` constant).</ParamField>
+<ParamField path="w" type="int32_t">Border thickness in pixels.</ParamField>
+
+```cpp title="Drawing a framed panel"
+tft.setViewport(20, 20, 200, 150);
+tft.fillScreen(TFT_DARKGREY);
+tft.frameViewport(TFT_WHITE, 2); // 2-pixel white border inside the viewport
+```
+
+---
+
+## setWindow() — Set Hardware Pixel RAM Window (End Coordinates)
+
+```cpp
+void setWindow(int32_t xs, int32_t ys, int32_t xe, int32_t ye)
+```
+
+Sets the display controller's pixel address window using start and **inclusive end** coordinates. After calling this, pixel data can be streamed into the window with `pushColor()`, `pushColors()`, or `pushBlock()`. This is a virtual method overridden by each display driver.
+
+<ParamField path="xs" type="int32_t">Start X coordinate (top-left, inclusive).</ParamField>
+<ParamField path="ys" type="int32_t">Start Y coordinate (top-left, inclusive).</ParamField>
+<ParamField path="xe" type="int32_t">End X coordinate (bottom-right, inclusive).</ParamField>
+<ParamField path="ye" type="int32_t">End Y coordinate (bottom-right, inclusive).</ParamField>
+
+```cpp title="Full-screen window with end coordinates"
+tft.startWrite();
+tft.setWindow(0, 0, 239, 319); // full screen on a 240×320 display
+for (int i = 0; i < 240 * 320; i++) {
+  tft.pushColor(TFT_BLACK);
+}
+tft.endWrite();
+```
+
+<Note>
+  `setWindow()` takes **inclusive** end coordinates. If you have a width and height, use `setAddrWindow()` instead to avoid off-by-one errors.
+</Note>
+
+---
+
+## setAddrWindow() — Set Hardware Window (Width/Height Form)
+
+```cpp
+void setAddrWindow(int32_t xs, int32_t ys, int32_t w, int32_t h)
+```
+
+Like `setWindow()` but takes a **width** and **height** instead of end coordinates, matching the convention used by most higher-level drawing calls and making it easier to work with rectangle geometry.
+
+<ParamField path="xs" type="int32_t">Start X coordinate.</ParamField>
+<ParamField path="ys" type="int32_t">Start Y coordinate.</ParamField>
+<ParamField path="w" type="int32_t">Window width in pixels.</ParamField>
+<ParamField path="h" type="int32_t">Window height in pixels.</ParamField>
+
+```cpp title="Setting a window and streaming image data"
+tft.startWrite();
+tft.setAddrWindow(10, 10, 100, 80);
+tft.pushColors(imageData, 100 * 80, true);
+tft.endWrite();
+```
+
+---
+
+## clipAddrWindow() — Clip Window to Display Bounds
+
+```cpp
+bool clipAddrWindow(int32_t *x, int32_t *y, int32_t *w, int32_t *h)
+```
+
+Clips a width/height-form window to the display boundaries, modifying the four values in place. Returns `false` if the clipped window has zero or negative area — that is, the window is entirely off-screen — in which case you should skip the draw operation.
+
+<ParamField path="x" type="int32_t *">Pointer to the X start coordinate; modified in place.</ParamField>
+<ParamField path="y" type="int32_t *">Pointer to the Y start coordinate; modified in place.</ParamField>
+<ParamField path="w" type="int32_t *">Pointer to the width; modified in place.</ParamField>
+<ParamField path="h" type="int32_t *">Pointer to the height; modified in place.</ParamField>
+
+<ResponseField name="return" type="bool">
+  `true` if the clipped window has a non-zero area; `false` if it is entirely off-screen.
+</ResponseField>
+
+```cpp title="Clipping a partially off-screen window"
+int32_t x = -10, y = 5, w = 60, h = 40;
+if (tft.clipAddrWindow(&x, &y, &w, &h)) {
+  tft.setAddrWindow(x, y, w, h);
+  // push pixels for the clipped region...
+}
+```
+
+---
+
+## clipWindow() — Clip Window to Display Bounds (End-Coordinate Form)
+
+```cpp
+bool clipWindow(int32_t *xs, int32_t *ys, int32_t *xe, int32_t *ye)
+```
+
+Like `clipAddrWindow()` but operates on inclusive end-coordinate pairs `(xs, ys)` → `(xe, ye)`. Modifies the coordinates in place and returns `false` if the clipped result is degenerate.
+
+<ParamField path="xs" type="int32_t *">Pointer to the start X; modified in place.</ParamField>
+<ParamField path="ys" type="int32_t *">Pointer to the start Y; modified in place.</ParamField>
+<ParamField path="xe" type="int32_t *">Pointer to the end X (inclusive); modified in place.</ParamField>
+<ParamField path="ye" type="int32_t *">Pointer to the end Y (inclusive); modified in place.</ParamField>
+
+<ResponseField name="return" type="bool">
+  `true` if the clipped window is valid; `false` if entirely off-screen.
+</ResponseField>
+
+```cpp title="Clipping an end-coordinate window"
+int32_t xs = 200, ys = 100, xe = 280, ye = 200;
+if (tft.clipWindow(&xs, &ys, &xe, &ye)) {
+  tft.setWindow(xs, ys, xe, ye);
+  // stream pixels...
+}
+```
+
+---
+
+## Complete Example
+
+```cpp title="Viewport clipping for a multi-panel UI"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+// Draw a simple widget that assumes (0,0) is its own top-left corner
+void drawWidget(uint16_t bgColor, uint16_t fgColor, const char* label) {
+  tft.fillScreen(bgColor);
+  tft.frameViewport(fgColor, 2);               // 2-px inner border
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(fgColor, bgColor);
+
+  int32_t cx = tft.getViewportWidth()  / 2;
+  int32_t cy = tft.getViewportHeight() / 2;
+  tft.drawString(label, cx, cy, 4);
+}
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);                          // 320×240 landscape
+  tft.fillScreen(TFT_BLACK);
+
+  // Top-left panel
+  tft.setViewport(0, 0, 160, 120, true);
+  drawWidget(TFT_NAVY, TFT_CYAN, "Panel A");
+
+  // Top-right panel
+  tft.setViewport(160, 0, 160, 120, true);
+  drawWidget(TFT_DARKGREEN, TFT_GREEN, "Panel B");
+
+  // Bottom-left panel
+  tft.setViewport(0, 120, 160, 120, true);
+  drawWidget(TFT_MAROON, TFT_RED, "Panel C");
+
+  // Bottom-right panel
+  tft.setViewport(160, 120, 160, 120, true);
+  drawWidget(TFT_PURPLE, TFT_MAGENTA, "Panel D");
+
+  // Restore full-screen access and draw a divider cross
+  tft.resetViewport();
+  tft.drawFastHLine(0, 120, 320, TFT_WHITE);
+  tft.drawFastVLine(160,  0, 240, TFT_WHITE);
+
+  // Demonstrate checkViewport for culling
+  int32_t sprX = 300, sprY = 10, sprW = 40, sprH = 40;
+  if (tft.checkViewport(sprX, sprY, sprW, sprH)) {
+    tft.fillRect(sprX, sprY, sprW, sprH, TFT_YELLOW); // visible — draw it
+  }
+}
+
+void loop() {}
+```

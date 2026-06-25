@@ -1,0 +1,151 @@
+---
+title: "TFT_eSPI Class API Reference Overview and Method Index"
+sidebarTitle: "Overview"
+description: "Complete API reference for the TFT_eSPI class — a high-performance Arduino TFT graphics library for ESP32, ESP8266, RP2040, and STM32 microcontrollers."
+---
+
+The `TFT_eSPI` class is a hardware-accelerated TFT graphics library that targets ESP8266, ESP32, RP2040, and STM32 boards. It provides a comprehensive set of drawing primitives, text rendering, color utilities, viewport clipping, and DMA-assisted pixel pushing — all in a single unified class. The current release is identified by the constant `TFT_ESPI_VERSION "2.5.43"`, and the library feature flag `TFT_ESPI_FEATURES 1` signals that viewport and clipping capability is compiled in.
+
+`TFT_eSPI` inherits from the Arduino [`Print`](https://reference.arduino.cc/reference/en/language/functions/communication/print/) class, which means the familiar `print()` and `println()` methods are available for streaming text to the display at the current cursor position, in addition to the purpose-built draw string methods. `TFT_eSprite` is declared as a `friend` class and shares internal state for off-screen sprite rendering.
+
+## Library Constants
+
+```cpp
+#define TFT_ESPI_VERSION  "2.5.43"   // Library version string
+#define TFT_ESPI_FEATURES 1          // Bit 0 set: viewport capability enabled
+#define TAB_COLOUR        0          // Default ST7735 tab colour
+#define CP437_SWITCH      1          // setAttribute id: enable/disable CP437 font correction
+#define UTF8_SWITCH       2          // setAttribute id: enable/disable UTF-8 decoding
+#define PSRAM_ENABLE      3          // setAttribute id: enable/disable PSRAM usage
+```
+
+## Key Public Member Variables
+
+The following public member variables are accessible directly on your `TFT_eSPI` instance. You can read them for layout calculations or write to them directly as a shorthand, though the corresponding setter methods are preferred for most use cases.
+
+| Variable | Type | Description |
+|---|---|---|
+| `textcolor` | `uint32_t` | Current text foreground colour |
+| `textbgcolor` | `uint32_t` | Current text background colour |
+| `bitmap_fg` | `uint32_t` | Bitmap foreground colour (bit = 1) |
+| `bitmap_bg` | `uint32_t` | Bitmap background colour (bit = 0) |
+| `textfont` | `uint8_t` | Currently selected font number |
+| `textsize` | `uint8_t` | Current font size multiplier |
+| `textdatum` | `uint8_t` | Text reference datum (alignment) |
+| `rotation` | `uint8_t` | Display rotation (0–3) |
+| `DMA_Enabled` | `bool` | `true` when DMA transfers are active |
+
+## API Method Groups
+
+<CardGroup cols={2}>
+  <Card title="Constructor & Init" icon="power-off" href="/api/tft-espi/constructor-init">
+    Construct the TFT object, call `begin()` or `init()`, set rotation, retrieve setup diagnostics, and verify the setup ID.
+  </Card>
+  <Card title="Drawing Shapes" icon="shapes" href="/api/tft-espi/drawing-shapes">
+    Draw outlines of pixels, lines, rectangles, circles, ellipses, triangles, arcs, bitmaps, and anti-aliased smooth shapes.
+  </Card>
+  <Card title="Filling Shapes" icon="fill" href="/api/tft-espi/filling-shapes">
+    Fill the screen or any closed shape — rectangles, rounded rectangles, circles, ellipses, triangles — including gradient fills.
+  </Card>
+  <Card title="Text Methods" icon="font" href="/api/tft-espi/text-methods">
+    Render strings, characters, numbers, and floats; configure fonts, text size, colour, datum, padding, and wrapping.
+  </Card>
+  <Card title="Color & Pixel" icon="palette" href="/api/tft-espi/color-pixel">
+    Read pixels, convert between RGB colour spaces, alpha-blend colours, push images and pixel buffers to the display.
+  </Card>
+  <Card title="Cursor & Rotation" icon="arrows-rotate" href="/api/tft-espi/cursor-rotation">
+    Manage the text cursor position, display rotation, drawing origin, colour push helpers, and SPI transaction control.
+  </Card>
+  <Card title="Viewport & Window" icon="crop" href="/api/tft-espi/viewport-window">
+    Define viewport clipping regions, draw frame borders, set low-level address windows, and clip draw commands.
+  </Card>
+</CardGroup>
+
+## setup_t Structure
+
+The `setup_t` structure can be populated by calling `getSetup()` and is useful for diagnostic sketches to inspect the compiled library configuration at runtime. Every field reflects a value set in `User_Setup.h` at compile time — nothing is measured from hardware.
+
+```cpp
+typedef struct {
+  String   version;       // TFT_ESPI_VERSION
+  String   setup_info;    // Setup reference name
+  uint32_t setup_id;      // ID from user setup
+  int32_t  esp;           // Processor code
+  uint8_t  trans;         // SPI transaction support
+  uint8_t  serial;        // Serial (SPI) or parallel
+  uint8_t  port;          // SPI port (not on GENERIC_PROCESSOR)
+  uint8_t  overlap;       // ESP8266 overlap mode
+  uint8_t  interface;     // Interface type
+
+  uint16_t tft_driver;    // Driver code in hex
+  uint16_t tft_width;     // Rotation-0 width
+  uint16_t tft_height;    // Rotation-0 height
+
+  // Display offsets per rotation (r0..r3)
+  uint8_t  r0_x_offset, r0_y_offset;
+  uint8_t  r1_x_offset, r1_y_offset;
+  uint8_t  r2_x_offset, r2_y_offset;
+  uint8_t  r3_x_offset, r3_y_offset;
+
+  // SPI pins
+  int8_t   pin_tft_mosi, pin_tft_miso;
+  int8_t   pin_tft_clk,  pin_tft_cs;
+
+  // Control pins
+  int8_t   pin_tft_dc, pin_tft_rd;
+  int8_t   pin_tft_wr, pin_tft_rst;
+
+  // Parallel port pins (d0–d7)
+  int8_t   pin_tft_d0, pin_tft_d1;
+  int8_t   pin_tft_d2, pin_tft_d3;
+  int8_t   pin_tft_d4, pin_tft_d5;
+  int8_t   pin_tft_d6, pin_tft_d7;
+
+  int8_t   pin_tft_led, pin_tft_led_on;
+  int8_t   pin_tch_cs;      // Touch chip-select
+
+  int16_t  tft_spi_freq;    // TFT write SPI frequency
+  int16_t  tft_rd_freq;     // TFT read SPI frequency
+  int16_t  tch_spi_freq;    // Touch SPI frequency
+} setup_t;
+```
+
+## Predefined Color Constants
+
+TFT_eSPI ships with a palette of ready-to-use RGB565 colour constants that you can use in any drawing call without needing to compute the packed value yourself.
+
+```cpp
+TFT_BLACK       // 0x0000
+TFT_WHITE       // 0xFFFF
+TFT_RED         // 0xF800
+TFT_GREEN       // 0x07E0
+TFT_BLUE        // 0x001F
+TFT_CYAN        // 0x07FF
+TFT_MAGENTA     // 0xF81F
+TFT_YELLOW      // 0xFFE0
+TFT_ORANGE      // 0xFDA0
+TFT_NAVY        // 0x000F
+TFT_DARKGREEN   // 0x03E0
+TFT_PURPLE      // 0x780F
+TFT_TRANSPARENT // 0x0120  (encodes to 8-bit and back losslessly)
+// ...and more
+```
+
+## Text Datum Constants
+
+Use these with `setTextDatum()` to control how the `(x, y)` coordinate passed to text draw functions is interpreted relative to the rendered string bounding box.
+
+| Constant | Value | Description |
+|---|---|---|
+| `TL_DATUM` | 0 | Top left (default) |
+| `TC_DATUM` | 1 | Top centre |
+| `TR_DATUM` | 2 | Top right |
+| `ML_DATUM` | 3 | Middle left |
+| `MC_DATUM` | 4 | Middle centre |
+| `MR_DATUM` | 5 | Middle right |
+| `BL_DATUM` | 6 | Bottom left |
+| `BC_DATUM` | 7 | Bottom centre |
+| `BR_DATUM` | 8 | Bottom right |
+| `L_BASELINE` | 9 | Left character baseline |
+| `C_BASELINE` | 10 | Centre character baseline |
+| `R_BASELINE` | 11 | Right character baseline |

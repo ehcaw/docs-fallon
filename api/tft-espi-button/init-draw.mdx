@@ -1,0 +1,242 @@
+---
+title: "TFT_eSPI_Button: initButton, drawButton, setLabelDatum"
+sidebarTitle: "Init & Draw"
+description: "Complete parameter reference for TFT_eSPI_Button initialisation and rendering — initButton, initButtonUL, setLabelDatum, and drawButton explained."
+---
+
+Before a `TFT_eSPI_Button` can be drawn it must be initialised with geometry, colours, and a label. Two initialisation variants are available: `initButton()` positions the button by its **centre** point, which is convenient when you already know where you want the middle of the button to sit; `initButtonUL()` positions it by its **upper-left** corner, which is more natural when laying out a grid of buttons from a fixed origin. Once initialised, you call `drawButton()` to render the button at any time — call it again with `inverted = true` to show a visual pressed state, and pass a `long_name` to override the stored label text on the fly.
+
+## `initButton()`
+
+Initialises the button using the centre coordinate `(x, y)`.
+
+```cpp
+void TFT_eSPI_Button::initButton(
+    TFT_eSPI *gfx,
+    int16_t   x,
+    int16_t   y,
+    uint16_t  w,
+    uint16_t  h,
+    uint16_t  outline,
+    uint16_t  fill,
+    uint16_t  textcolor,
+    char     *label,
+    uint8_t   textsize
+);
+```
+
+<ParamField path="gfx" type="TFT_eSPI*">
+  Pointer to the `TFT_eSPI` display instance the button should be drawn on. Pass `&tft` when your display object is named `tft`.
+</ParamField>
+
+<ParamField path="x" type="int16_t">
+  Horizontal centre of the button in screen pixels.
+</ParamField>
+
+<ParamField path="y" type="int16_t">
+  Vertical centre of the button in screen pixels.
+</ParamField>
+
+<ParamField path="w" type="uint16_t">
+  Width of the button in pixels.
+</ParamField>
+
+<ParamField path="h" type="uint16_t">
+  Height of the button in pixels.
+</ParamField>
+
+<ParamField path="outline" type="uint16_t">
+  16-bit RGB565 colour for the button border. Use any `TFT_*` colour constant or a value produced by `color565()`. See the [Color Constants](/api/constants/colors) reference for the full palette.
+</ParamField>
+
+<ParamField path="fill" type="uint16_t">
+  16-bit RGB565 background fill colour for the button body.
+</ParamField>
+
+<ParamField path="textcolor" type="uint16_t">
+  16-bit RGB565 colour for the label text rendered inside the button.
+</ParamField>
+
+<ParamField path="label" type="char*">
+  Null-terminated C string to display as the button label. The string is copied internally so it is safe to pass a stack buffer.
+</ParamField>
+
+<ParamField path="textsize" type="uint8_t">
+  Integer size multiplier for the built-in bitmap font. `1` = 6×8 px per character, `2` = 12×16 px, and so on.
+</ParamField>
+
+---
+
+## `initButtonUL()`
+
+Identical to `initButton()` but positions the button by its **upper-left** corner `(x1, y1)` instead of its centre. All other parameters carry the same meaning.
+
+```cpp
+void TFT_eSPI_Button::initButtonUL(
+    TFT_eSPI *gfx,
+    int16_t   x1,
+    int16_t   y1,
+    uint16_t  w,
+    uint16_t  h,
+    uint16_t  outline,
+    uint16_t  fill,
+    uint16_t  textcolor,
+    char     *label,
+    uint8_t   textsize
+);
+```
+
+<ParamField path="gfx" type="TFT_eSPI*">
+  Pointer to the `TFT_eSPI` display instance.
+</ParamField>
+
+<ParamField path="x1" type="int16_t">
+  Horizontal coordinate of the **left edge** of the button in screen pixels.
+</ParamField>
+
+<ParamField path="y1" type="int16_t">
+  Vertical coordinate of the **top edge** of the button in screen pixels.
+</ParamField>
+
+<ParamField path="w" type="uint16_t">
+  Width of the button in pixels.
+</ParamField>
+
+<ParamField path="h" type="uint16_t">
+  Height of the button in pixels.
+</ParamField>
+
+<ParamField path="outline" type="uint16_t">
+  16-bit RGB565 border colour.
+</ParamField>
+
+<ParamField path="fill" type="uint16_t">
+  16-bit RGB565 background fill colour.
+</ParamField>
+
+<ParamField path="textcolor" type="uint16_t">
+  16-bit RGB565 label text colour.
+</ParamField>
+
+<ParamField path="label" type="char*">
+  Null-terminated label string.
+</ParamField>
+
+<ParamField path="textsize" type="uint8_t">
+  Font size multiplier.
+</ParamField>
+
+<Tip>
+  `initButtonUL()` is particularly handy when building a button grid. Calculate each button's upper-left corner as `(col * (btnW + gap), row * (btnH + gap))` and pass it directly — no centre-offset arithmetic required.
+</Tip>
+
+---
+
+## `setLabelDatum()`
+
+Adjusts where the label text is anchored inside the button, relative to the button centre, and which text alignment datum is used.
+
+```cpp
+void TFT_eSPI_Button::setLabelDatum(
+    int16_t x_delta,
+    int16_t y_delta,
+    uint8_t datum = MC_DATUM
+);
+```
+
+<ParamField path="x_delta" type="int16_t">
+  Horizontal pixel offset to shift the label from the button centre. Positive values move the label right.
+</ParamField>
+
+<ParamField path="y_delta" type="int16_t">
+  Vertical pixel offset to shift the label from the button centre. Positive values move the label down.
+</ParamField>
+
+<ParamField path="datum" type="uint8_t">
+  Text alignment datum constant — one of the `*_DATUM` values (e.g. `MC_DATUM`, `TL_DATUM`). Defaults to `MC_DATUM` (middle-centre). See the [Datum Constants](/api/constants/datums) reference for all values.
+</ParamField>
+
+---
+
+## `drawButton()`
+
+Renders the button on the display. Call this after `initButton()` or `initButtonUL()`, and again any time the visual state should update.
+
+```cpp
+void TFT_eSPI_Button::drawButton(
+    bool   inverted  = false,
+    String long_name = ""
+);
+```
+
+<ParamField path="inverted" type="bool">
+  When `true`, the fill and outline colours are swapped, producing a visually "pressed" appearance. Defaults to `false` (normal state).
+</ParamField>
+
+<ParamField path="long_name" type="String">
+  If non-empty, this string is rendered as the label instead of the one supplied to `initButton()`. Useful for updating a button's text on the fly without reinitialising it. Defaults to `""` (use the stored label).
+</ParamField>
+
+---
+
+## Complete init and draw example
+
+The example below creates two buttons side by side — one using centre-based init, the other using upper-left init — then shows how to redraw them with inverted colours and dynamic labels.
+
+<Steps>
+  <Step title="Include the library and declare instances">
+    ```cpp
+    #include <TFT_eSPI.h>
+    #include <SPI.h>
+
+    TFT_eSPI      tft = TFT_eSPI();
+    TFT_eSPI_Button btnOK;
+    TFT_eSPI_Button btnCancel;
+    ```
+  </Step>
+  <Step title="Initialise and draw the buttons in setup()">
+    ```cpp
+    void setup() {
+      tft.init();
+      tft.setRotation(1);
+      tft.fillScreen(TFT_BLACK);
+
+      // Centre-based init: button centred at (80, 200)
+      btnOK.initButton(&tft,
+                       80, 200,         // x centre, y centre
+                       120, 44,         // width, height
+                       TFT_WHITE,       // outline
+                       TFT_DARKGREEN,   // fill
+                       TFT_WHITE,       // text colour
+                       "OK",            // label
+                       2);              // text size
+      btnOK.drawButton();
+
+      // Upper-left-based init: top-left corner at (170, 178)
+      btnCancel.initButtonUL(&tft,
+                             170, 178,      // x1, y1 (upper-left)
+                             120, 44,
+                             TFT_WHITE,
+                             TFT_MAROON,
+                             TFT_WHITE,
+                             "Cancel",
+                             2);
+      btnCancel.drawButton();
+    }
+    ```
+  </Step>
+  <Step title="Redraw with inverted colours on press">
+    ```cpp
+    // Somewhere in loop() after confirming a button was touched:
+    btnOK.drawButton(true);   // visually depressed
+    delay(120);
+    btnOK.drawButton(false);  // restore normal state
+    ```
+  </Step>
+  <Step title="Update label text dynamically">
+    ```cpp
+    // Override the stored label for one draw call
+    btnOK.drawButton(false, "Done!");
+    ```
+  </Step>
+</Steps>

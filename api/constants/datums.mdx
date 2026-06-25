@@ -1,0 +1,144 @@
+---
+title: "TFT_eSPI Datum Constants: Text Alignment Reference"
+sidebarTitle: "Datum Constants"
+description: "All 12 TFT_eSPI text datum alignment constants — TL_DATUM through R_BASELINE — with a visual layout guide, alias table, and setTextDatum() usage examples."
+---
+
+In TFT_eSPI, a **datum** is the anchor point that `drawString()` and related text functions use to position a string on screen. When you call `tft.drawString("Hello", x, y)`, the coordinates `x` and `y` don't refer to the top-left corner of the text by default — they refer to whatever datum is currently active. `TL_DATUM` (top-left) is the default, so in the default state `x, y` is the top-left corner of the first character. Switching to `MC_DATUM` (middle-centre) makes `x, y` the geometric centre of the rendered string, which is ideal for centring labels inside buttons or panel headings. You set the active datum with `setTextDatum()` and read it back with `getTextDatum()`.
+
+## Datum constants
+
+| Constant | Alias | Value | Anchor position |
+|---|---|:---:|---|
+| `TL_DATUM` | — | `0` | Top-left corner of the text bounding box *(default)* |
+| `TC_DATUM` | — | `1` | Top-centre |
+| `TR_DATUM` | — | `2` | Top-right corner |
+| `ML_DATUM` | `CL_DATUM` | `3` | Middle-left (vertically centred, left-aligned) |
+| `MC_DATUM` | `CC_DATUM` | `4` | Middle-centre (horizontally and vertically centred) |
+| `MR_DATUM` | `CR_DATUM` | `5` | Middle-right |
+| `BL_DATUM` | — | `6` | Bottom-left corner |
+| `BC_DATUM` | — | `7` | Bottom-centre |
+| `BR_DATUM` | — | `8` | Bottom-right corner |
+| `L_BASELINE` | — | `9` | Left edge of the character baseline |
+| `C_BASELINE` | — | `10` | Centre of the character baseline |
+| `R_BASELINE` | — | `11` | Right edge of the character baseline |
+
+<Note>
+  `ML_DATUM` and `CL_DATUM` are identical integer values (`3`), as are the `MC`/`CC` and `MR`/`CR` pairs. They exist as readability aliases — choose whichever naming convention reads most naturally in your code.
+</Note>
+
+---
+
+## Visual layout of datum positions
+
+The grid below shows where `(x, y)` maps to on a text bounding box for each of the nine corner/edge datums:
+
+```
+               x (left)     x (centre)    x (right)
+                  │               │              │
+  y (top)    ── TL_DATUM      TC_DATUM      TR_DATUM
+                  │               │              │
+  y (middle) ── ML_DATUM      MC_DATUM      MR_DATUM
+                  │               │              │
+  y (bottom) ── BL_DATUM      BC_DATUM      BR_DATUM
+                  │               │              │
+  y (baseline) ─ L_BASELINE   C_BASELINE    R_BASELINE
+```
+
+The **baseline** is the invisible horizontal line that most characters rest on — the same line the capital letter `A` sits on. Descenders (the tails on `g`, `p`, `y`) extend *below* the baseline, so the bottom of the bounding box is lower than the baseline for fonts that include descenders.
+
+---
+
+## `setTextDatum()` — apply a datum globally
+
+```cpp
+void TFT_eSPI::setTextDatum(uint8_t datum);
+```
+
+Sets the active datum for all subsequent `drawString()`, `drawNumber()`, and `drawFloat()` calls until you change it again. You can read the current datum back at any time:
+
+```cpp
+uint8_t TFT_eSPI::getTextDatum(); // returns a value 0–11
+```
+
+---
+
+## Centering text with `MC_DATUM`
+
+The most common use of datum constants is centring a label in the middle of the screen or inside a panel. Pass `MC_DATUM` to `setTextDatum()` and then use `tft.width() / 2` and `tft.height() / 2` as your coordinates:
+
+```cpp center text with MC_DATUM
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  // Centre a status message in the exact middle of the screen
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("No signal", tft.width() / 2, tft.height() / 2, 2);
+
+  // Centre a heading along the top edge
+  tft.setTextDatum(TC_DATUM);
+  tft.drawString("Settings", tft.width() / 2, 8, 4);
+
+  // Right-align a version string against the right edge
+  tft.setTextDatum(TR_DATUM);
+  tft.drawString("v2.5.43", tft.width() - 4, 8, 2);
+}
+
+void loop() {}
+```
+
+---
+
+## Drawing at multiple positions with different datums
+
+```cpp multiple datum positions
+void setup() {
+  tft.init();
+  tft.fillScreen(TFT_NAVY);
+  tft.setTextColor(TFT_YELLOW);
+
+  int cx = tft.width()  / 2;
+  int cy = tft.height() / 2;
+
+  // Top-left datum — x,y is the top-left of the text
+  tft.setTextDatum(TL_DATUM);
+  tft.drawString("TL", 0, 0, 2);
+
+  // Middle-centre datum — x,y is the exact centre of the text
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("MC", cx, cy, 2);
+
+  // Bottom-right datum — x,y is the bottom-right corner
+  tft.setTextDatum(BR_DATUM);
+  tft.drawString("BR", tft.width(), tft.height(), 2);
+
+  // Baseline-left datum — x,y sits on the baseline at the left of the text
+  tft.setTextDatum(L_BASELINE);
+  tft.drawString("Baseline", 10, cy + 40, 2);
+}
+```
+
+---
+
+## Datum in `TFT_eSPI_Button::setLabelDatum()`
+
+Button labels use `MC_DATUM` by default. Pass a different datum to `setLabelDatum()` when you need the label anchored elsewhere within the button:
+
+```cpp button label datum
+// Shift label 4 px left and anchor it to the left-centre of the button
+btn.setLabelDatum(-4, 0, ML_DATUM);
+btn.drawButton();
+```
+
+See the [Init & Draw](/api/tft-espi-button/init-draw) reference for the full `setLabelDatum()` parameter list.
+
+<Tip>
+  Always restore `TL_DATUM` with `setTextDatum(TL_DATUM)` after positioned drawing if the rest of your sketch expects the default top-left anchor. Leaving an unexpected datum active is a common source of misaligned text bugs.
+</Tip>

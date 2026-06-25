@@ -1,0 +1,190 @@
+---
+title: "TFT_eSPI Color System: RGB565 Format and Constants"
+sidebarTitle: "Colors"
+description: "Master TFT_eSPI's 16-bit RGB565 encoding, 25 predefined color constants, color conversion helpers, alpha blending, and the TFT_TRANSPARENT sprite key."
+---
+
+TFT_eSPI represents every pixel color as a 16-bit `uint16_t` value in the **RGB565** format. Understanding this encoding helps you work confidently with the predefined color constants, convert between color spaces, and handle transparency when working with sprites.
+
+## The RGB565 Color Format
+
+RGB565 packs a full color into 16 bits by allocating:
+
+- **5 bits** for Red (values 0–31, mapped to 0–255)
+- **6 bits** for Green (values 0–63, mapped to 0–255 — one extra bit because the human eye is most sensitive to green)
+- **5 bits** for Blue (values 0–31, mapped to 0–255)
+
+The bit layout from most-significant to least-significant is:
+
+```text
+Bit:  15 14 13 12 11 | 10  9  8  7  6  5 |  4  3  2  1  0
+      R4 R3 R2 R1 R0   G5 G4 G3 G2 G1 G0   B4 B3 B2 B1 B0
+```
+
+This gives 65,536 distinct colors — far fewer than 24-bit RGB, but enough for rich UIs on microcontroller displays, and compact enough to fit two pixels in a single 32-bit register.
+
+## Predefined Color Constants
+
+TFT_eSPI ships with 25 ready-to-use color constants. All of them are `int32_t` values expressed as 16-bit RGB565 words that you can use anywhere a color argument is expected.
+
+| Constant          | Hex Value | Red | Green | Blue |
+|-------------------|:---------:|:---:|:-----:|:----:|
+| `TFT_BLACK`       | `0x0000`  |   0 |     0 |    0 |
+| `TFT_NAVY`        | `0x000F`  |   0 |     0 |  128 |
+| `TFT_DARKGREEN`   | `0x03E0`  |   0 |   128 |    0 |
+| `TFT_DARKCYAN`    | `0x03EF`  |   0 |   128 |  128 |
+| `TFT_MAROON`      | `0x7800`  | 128 |     0 |    0 |
+| `TFT_PURPLE`      | `0x780F`  | 128 |     0 |  128 |
+| `TFT_OLIVE`       | `0x7BE0`  | 128 |   128 |    0 |
+| `TFT_LIGHTGREY`   | `0xD69A`  | 211 |   211 |  211 |
+| `TFT_DARKGREY`    | `0x7BEF`  | 128 |   128 |  128 |
+| `TFT_BLUE`        | `0x001F`  |   0 |     0 |  255 |
+| `TFT_GREEN`       | `0x07E0`  |   0 |   255 |    0 |
+| `TFT_CYAN`        | `0x07FF`  |   0 |   255 |  255 |
+| `TFT_RED`         | `0xF800`  | 255 |     0 |    0 |
+| `TFT_MAGENTA`     | `0xF81F`  | 255 |     0 |  255 |
+| `TFT_YELLOW`      | `0xFFE0`  | 255 |   255 |    0 |
+| `TFT_WHITE`       | `0xFFFF`  | 255 |   255 |  255 |
+| `TFT_ORANGE`      | `0xFDA0`  | 255 |   180 |    0 |
+| `TFT_GREENYELLOW` | `0xB7E0`  | 180 |   255 |    0 |
+| `TFT_PINK`        | `0xFE19`  | 255 |   192 |  203 |
+| `TFT_BROWN`       | `0x9A60`  | 150 |    75 |    0 |
+| `TFT_GOLD`        | `0xFEA0`  | 255 |   215 |    0 |
+| `TFT_SILVER`      | `0xC618`  | 192 |   192 |  192 |
+| `TFT_SKYBLUE`     | `0x867D`  | 135 |   206 |  235 |
+| `TFT_VIOLET`      | `0x915C`  | 180 |    46 |  226 |
+| `TFT_TRANSPARENT` | `0x0120`  |  —  |    —  |   —  |
+
+<Note>
+  `TFT_TRANSPARENT` (`0x0120`) is a reserved sentinel value used as a **sprite color key**, not a real drawable color. See the section below for details.
+</Note>
+
+## Constructing Custom Colors with color565()
+
+When you need a color that is not in the predefined list, use `color565()` to convert standard 8-bit R, G, B component values into the 16-bit RGB565 format:
+
+```cpp
+uint16_t TFT_eSPI::color565(uint8_t red, uint8_t green, uint8_t blue);
+```
+
+<Tip>
+  When sourcing colors from a design tool that gives you hex values like `#FF7F50` (coral), convert them with `tft.color565(0xFF, 0x7F, 0x50)`. Direct assignment of 24-bit hex literals produces the wrong color because the bit layout does not match RGB565.
+</Tip>
+
+## Color Conversion Functions
+
+TFT_eSPI provides several helper methods for converting between color spaces. All are members of the `TFT_eSPI` class.
+
+<Tabs>
+  <Tab title="color565()">
+    Convert 8-bit R, G, B components to a 16-bit RGB565 value. Use this whenever you have a standard `#RRGGBB` color from a design tool.
+
+    ```cpp
+    uint16_t color565(uint8_t red, uint8_t green, uint8_t blue);
+
+    // Example: coral (#FF7F50)
+    uint16_t coral = tft.color565(0xFF, 0x7F, 0x50);
+    tft.fillRect(10, 10, 100, 60, coral);
+    ```
+  </Tab>
+  <Tab title="color8to16()">
+    Expand a packed 8-bit **RGB332** color to 16-bit **RGB565**. Useful when reading from 8-bit sprite buffers or low-color assets.
+
+    ```cpp
+    uint16_t color8to16(uint8_t color332);
+
+    // Example: expand a packed 8-bit value
+    uint16_t expanded = tft.color8to16(0b11100011);
+    ```
+  </Tab>
+  <Tab title="color16to24()">
+    Convert a 16-bit RGB565 value to a 24-bit **RGB888** `uint32_t`. Useful when passing TFT_eSPI colors to libraries or APIs that expect full 24-bit values.
+
+    ```cpp
+    uint32_t color16to24(uint16_t color565);
+
+    // Example: TFT_CYAN → 0x0000FFFF (R=0, G=255, B=255)
+    uint32_t rgb24 = tft.color16to24(TFT_CYAN);
+    ```
+  </Tab>
+  <Tab title="alphaBlend()">
+    Alpha-blend a foreground color over a background color using an 8-bit alpha value where `0` is fully transparent and `255` is fully opaque.
+
+    ```cpp
+    uint16_t alphaBlend(uint8_t alpha, uint16_t fgc, uint16_t bgc);
+
+    // Example: blend TFT_RED 50% over TFT_BLUE
+    uint16_t blended = tft.alphaBlend(128, TFT_RED, TFT_BLUE);
+    tft.fillRect(120, 10, 100, 60, blended);
+    ```
+  </Tab>
+</Tabs>
+
+## Full Color Example
+
+The following sketch shows color construction, blending, and conversion together in a single `setup()`:
+
+```cpp
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Build a custom coral color from 8-bit RGB components
+  uint16_t coral = tft.color565(255, 127, 80);
+  tft.fillRect(10, 10, 100, 60, coral);
+
+  // Blend TFT_RED 50% over TFT_BLUE
+  uint16_t blended = tft.alphaBlend(128, TFT_RED, TFT_BLUE);
+  tft.fillRect(120, 10, 100, 60, blended);
+
+  // Use a predefined constant directly
+  tft.fillRect(230, 10, 100, 60, TFT_YELLOW);
+
+  // Convert a 16-bit color to 24-bit for another API
+  uint32_t rgb24 = tft.color16to24(TFT_CYAN);
+  // rgb24 == 0x0000FFFF (R=0, G=255, B=255)
+}
+
+void loop() {}
+```
+
+## TFT_TRANSPARENT and Sprite Color Keys
+
+`TFT_TRANSPARENT` (`0x0120`) is a reserved sentinel color used with **sprites**. It is not intended as an artistic color — it is a carefully chosen 16-bit value with two key properties:
+
+1. It encodes to the same 8-bit representation when stored in an 8-bit sprite buffer.
+2. It decodes back to the identical 16-bit value, making round-trips lossless.
+
+When you push a sprite to the display and mark `TFT_TRANSPARENT` as the transparent color key, any pixel holding that value is **skipped** rather than drawn, producing true sprite transparency without a dedicated alpha channel.
+
+<Warning>
+  Avoid using `TFT_TRANSPARENT` as an intentional fill color in your UI. Any pixel painted with it will become invisible when the sprite is pushed to the screen, because the library treats it as "no color here."
+</Warning>
+
+## Default 4-Bit Palette for Sprites
+
+`TFT_eSprite` supports 4-bit (16-color) sprites using a fixed palette stored in flash as `default_4bit_palette[]`. The 16 entries follow the classic resistor color-code sequence for indices 0–9:
+
+| Index | Color Constant  |
+|:-----:|-----------------|
+|  `0`  | `TFT_BLACK`     |
+|  `1`  | `TFT_BROWN`     |
+|  `2`  | `TFT_RED`       |
+|  `3`  | `TFT_ORANGE`    |
+|  `4`  | `TFT_YELLOW`    |
+|  `5`  | `TFT_GREEN`     |
+|  `6`  | `TFT_BLUE`      |
+|  `7`  | `TFT_PURPLE`    |
+|  `8`  | `TFT_DARKGREY`  |
+|  `9`  | `TFT_WHITE`     |
+| `10`  | `TFT_CYAN`      |
+| `11`  | `TFT_MAGENTA`   |
+| `12`  | `TFT_MAROON`    |
+| `13`  | `TFT_DARKGREEN` |
+| `14`  | `TFT_NAVY`      |
+| `15`  | `TFT_PINK`      |

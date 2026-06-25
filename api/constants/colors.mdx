@@ -1,0 +1,121 @@
+---
+title: "TFT_eSPI Color Constants: Full RGB565 Palette Guide"
+sidebarTitle: "Color Constants"
+description: "All 24 predefined 16-bit RGB565 color constants in TFT_eSPI, their hex values and RGB components, plus how to create custom colors with color565()."
+---
+
+TFT_eSPI represents colors as 16-bit **RGB565** values. In this encoding the upper 5 bits hold red (0–31), the middle 6 bits hold green (0–63), and the lower 5 bits hold blue (0–31). Because the human eye is most sensitive to green, that channel receives the extra bit. A raw `uint16_t` value such as `0xF800` therefore means pure red: `11111 000000 00000` in binary. TFT_eSPI ships with 24 named color constants covering the most common UI colors, so you rarely need to calculate raw hex values by hand.
+
+## Named color constants
+
+The table below lists every constant defined in `TFT_eSPI.h`, its 16-bit hexadecimal value, and the approximate 8-bit-per-channel RGB components that the value encodes.
+
+| Constant | Hex value | Red | Green | Blue |
+|---|---|:---:|:---:|:---:|
+| `TFT_BLACK` | `0x0000` | 0 | 0 | 0 |
+| `TFT_NAVY` | `0x000F` | 0 | 0 | 128 |
+| `TFT_DARKGREEN` | `0x03E0` | 0 | 128 | 0 |
+| `TFT_DARKCYAN` | `0x03EF` | 0 | 128 | 128 |
+| `TFT_MAROON` | `0x7800` | 128 | 0 | 0 |
+| `TFT_PURPLE` | `0x780F` | 128 | 0 | 128 |
+| `TFT_OLIVE` | `0x7BE0` | 128 | 128 | 0 |
+| `TFT_LIGHTGREY` | `0xD69A` | 211 | 211 | 211 |
+| `TFT_DARKGREY` | `0x7BEF` | 128 | 128 | 128 |
+| `TFT_BLUE` | `0x001F` | 0 | 0 | 255 |
+| `TFT_GREEN` | `0x07E0` | 0 | 255 | 0 |
+| `TFT_CYAN` | `0x07FF` | 0 | 255 | 255 |
+| `TFT_RED` | `0xF800` | 255 | 0 | 0 |
+| `TFT_MAGENTA` | `0xF81F` | 255 | 0 | 255 |
+| `TFT_YELLOW` | `0xFFE0` | 255 | 255 | 0 |
+| `TFT_WHITE` | `0xFFFF` | 255 | 255 | 255 |
+| `TFT_ORANGE` | `0xFDA0` | 255 | 180 | 0 |
+| `TFT_GREENYELLOW` | `0xB7E0` | 180 | 255 | 0 |
+| `TFT_PINK` | `0xFE19` | 255 | 192 | 203 |
+| `TFT_BROWN` | `0x9A60` | 150 | 75 | 0 |
+| `TFT_GOLD` | `0xFEA0` | 255 | 215 | 0 |
+| `TFT_SILVER` | `0xC618` | 192 | 192 | 192 |
+| `TFT_SKYBLUE` | `0x867D` | 135 | 206 | 235 |
+| `TFT_VIOLET` | `0x915C` | 180 | 46 | 226 |
+
+---
+
+## RGB565 format explained
+
+In the RGB565 format each pixel is stored in a 16-bit unsigned integer laid out as follows:
+
+```
+Bit:  15 14 13 12 11 | 10  9  8  7  6  5 |  4  3  2  1  0
+      ──────────────   ──────────────────   ──────────────
+      Red (5 bits)     Green (6 bits)       Blue (5 bits)
+```
+
+Because each red or blue channel has only 5 bits, values are scaled from 0–255 to 0–31 (divide by 8). The green channel scales from 0–255 to 0–63 (divide by 4). This is why `TFT_GREEN` (`0x07E0`) encodes as pure green at full brightness even though its hex value looks nothing like `0x00FF00`.
+
+---
+
+## Creating custom colors with `color565()`
+
+When you need a color that isn't in the predefined list, use `color565()` to convert standard 8-bit-per-channel RGB values into the 16-bit RGB565 format:
+
+```cpp
+// Syntax
+uint16_t TFT_eSPI::color565(uint8_t r, uint8_t g, uint8_t b);
+```
+
+Pass standard 8-bit values (0–255) for each channel and receive back the packed `uint16_t` ready to use with any drawing function:
+
+```cpp custom color examples
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.fillScreen(TFT_BLACK);
+
+  uint16_t coral    = tft.color565(255, 127,  80);
+  uint16_t teal     = tft.color565(  0, 128, 128);
+  uint16_t lavender = tft.color565(230, 230, 250);
+
+  // Fill the screen with coral then draw a lavender label
+  tft.fillScreen(coral);
+  tft.setTextColor(lavender, coral);
+  tft.drawString("Hello!", 10, 10, 4);
+
+  // Draw a teal rectangle
+  tft.fillRect(10, 50, 100, 40, teal);
+}
+```
+
+<Note>
+  Because RGB565 has only 5 or 6 bits per channel, the converted value is a close approximation of the requested color, not an exact match. `color565(255, 128, 0)` and `color565(255, 132, 0)` may produce the same 16-bit output.
+</Note>
+
+---
+
+## Default 4-bit palette for color sprites
+
+4-bit sprites store a palette index (0–15) per pixel rather than a full color value, halving memory usage compared to 8-bit sprites. TFT_eSPI defines a default 16-entry palette in `default_4bit_palette[]`. Indices 0–9 follow the **resistor color code** (black, brown, red, orange, yellow, green, blue, purple/violet, grey, white), making the mapping straightforward to memorise.
+
+| Index | Color constant |
+|:---:|---|
+| 0 | `TFT_BLACK` |
+| 1 | `TFT_BROWN` |
+| 2 | `TFT_RED` |
+| 3 | `TFT_ORANGE` |
+| 4 | `TFT_YELLOW` |
+| 5 | `TFT_GREEN` |
+| 6 | `TFT_BLUE` |
+| 7 | `TFT_PURPLE` |
+| 8 | `TFT_DARKGREY` |
+| 9 | `TFT_WHITE` |
+| 10 | `TFT_CYAN` |
+| 11 | `TFT_MAGENTA` |
+| 12 | `TFT_MAROON` |
+| 13 | `TFT_DARKGREEN` |
+| 14 | `TFT_NAVY` |
+| 15 | `TFT_PINK` |
+
+<Tip>
+  You can supply a custom palette array when calling `pushSprite()` on a 4-bit sprite. The default palette only applies when no custom palette is specified.
+</Tip>

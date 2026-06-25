@@ -1,0 +1,308 @@
+---
+title: "Drawing Shapes and Primitives with TFT_eSPI"
+sidebarTitle: "Shapes"
+description: "Draw pixels, lines, rectangles, circles, ellipses, triangles, and smooth gradient fills on TFT displays using TFT_eSPI's built-in primitive functions."
+---
+
+TFT_eSPI gives you a complete toolkit of 2D drawing primitives — from a single pixel all the way to filled gradient rectangles. The display origin `(0, 0)` sits at the top-left corner; X increases to the right and Y increases downward. Every coordinate is expressed in pixels, and all drawing calls clip automatically to the active viewport, so you never need to guard against out-of-bounds writes. Outline functions draw only the border of a shape, while their `fill` counterparts flood the interior with a solid color.
+
+<Note>
+All color arguments accept 16-bit RGB565 values. TFT_eSPI ships with named constants such as `TFT_RED`, `TFT_GREEN`, `TFT_BLUE`, `TFT_WHITE`, and `TFT_BLACK`. You can also create custom colors at runtime with `tft.color565(r, g, b)`.
+</Note>
+
+---
+
+## Pixels
+
+### `drawPixel`
+
+`drawPixel` pushes a single pixel to the display. A second overload lets you alpha-blend the pixel against a background color for smooth anti-aliased point rendering.
+
+```cpp
+void     drawPixel(int32_t x, int32_t y, uint32_t color);
+uint16_t drawPixel(int32_t x, int32_t y, uint32_t color, uint8_t alpha, uint32_t bg_color = 0x00FFFFFF);
+```
+
+<ParamField path="x" type="int32_t" required>
+  Horizontal pixel coordinate.
+</ParamField>
+<ParamField path="y" type="int32_t" required>
+  Vertical pixel coordinate.
+</ParamField>
+<ParamField path="color" type="uint32_t" required>
+  Pixel color in RGB565 or a `TFT_*` constant.
+</ParamField>
+<ParamField path="alpha" type="uint8_t">
+  Alpha-blend value: `0` = fully transparent, `255` = fully opaque. Only used by the blending overload.
+</ParamField>
+<ParamField path="bg_color" type="uint32_t">
+  Background color to blend against. The sentinel `0x00FFFFFF` (default) instructs the library to read the actual pixel from the display. Providing an explicit color is faster.
+</ParamField>
+
+The blending overload returns the resulting `uint16_t` pixel color after blending is applied.
+
+```cpp drawPixel.ino
+tft.drawPixel(10, 10, TFT_RED);                      // Solid red pixel
+tft.drawPixel(20, 20, TFT_BLUE, 128, TFT_BLACK);     // 50 % blue blended over black
+```
+
+---
+
+## Lines
+
+### `drawLine`
+
+`drawLine` connects two arbitrary points using Bresenham's algorithm. It clips to the viewport and handles any angle.
+
+```cpp
+void drawLine(int32_t xs, int32_t ys, int32_t xe, int32_t ye, uint32_t color);
+```
+
+<ParamField path="xs" type="int32_t" required>X coordinate of the start point.</ParamField>
+<ParamField path="ys" type="int32_t" required>Y coordinate of the start point.</ParamField>
+<ParamField path="xe" type="int32_t" required>X coordinate of the end point.</ParamField>
+<ParamField path="ye" type="int32_t" required>Y coordinate of the end point.</ParamField>
+<ParamField path="color" type="uint32_t" required>Line color.</ParamField>
+
+```cpp drawLine.ino
+tft.drawLine(10, 20, 200, 150, TFT_GREEN);
+```
+
+### `drawFastHLine` and `drawFastVLine`
+
+These optimized routines handle axis-aligned lines in a single block transfer to the display controller, making them considerably faster than `drawLine` for horizontal and vertical segments.
+
+```cpp
+void drawFastHLine(int32_t x, int32_t y, int32_t w, uint32_t color);
+void drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color);
+```
+
+<ParamField path="x" type="int32_t" required>Starting X coordinate.</ParamField>
+<ParamField path="y" type="int32_t" required>Starting Y coordinate.</ParamField>
+<ParamField path="w" type="int32_t" required>`drawFastHLine` — number of pixels to draw rightward.</ParamField>
+<ParamField path="h" type="int32_t" required>`drawFastVLine` — number of pixels to draw downward.</ParamField>
+<ParamField path="color" type="uint32_t" required>Line color.</ParamField>
+
+```cpp fastLines.ino
+tft.drawFastHLine(10, 60, 200, TFT_WHITE);   // Horizontal white line, 200 px wide
+tft.drawFastVLine(120, 0, 240, TFT_CYAN);    // Vertical cyan line, 240 px tall
+```
+
+<Tip>
+Use `drawFastHLine` and `drawFastVLine` whenever you need horizontal or vertical lines — they skip the Bresenham logic entirely and issue a single address-window command to the display driver.
+</Tip>
+
+---
+
+## Rectangles
+
+### `drawRect` and `drawRoundRect`
+
+`drawRect` draws a plain axis-aligned rectangle outline. `drawRoundRect` draws the same outline with arced corners controlled by a radius parameter.
+
+```cpp
+void drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color);
+void drawRoundRect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, uint32_t color);
+```
+
+<ParamField path="x" type="int32_t" required>X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int32_t" required>Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int32_t" required>Width in pixels.</ParamField>
+<ParamField path="h" type="int32_t" required>Height in pixels.</ParamField>
+<ParamField path="radius" type="int32_t">Corner arc radius in pixels (`drawRoundRect` only). Larger values produce more rounded corners.</ParamField>
+<ParamField path="color" type="uint32_t" required>Border color.</ParamField>
+
+```cpp rects.ino
+tft.drawRect(10, 10, 100, 60, TFT_RED);            // Plain rectangle outline
+tft.drawRoundRect(20, 80, 100, 60, 10, TFT_BLUE);  // Rounded corners, radius = 10
+```
+
+### `fillRect` and `fillRoundRect`
+
+The filled counterparts of the outline functions above. Parameters are identical; `color` sets the fill color.
+
+```cpp
+void fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color);
+void fillRoundRect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, uint32_t color);
+```
+
+```cpp fillRects.ino
+tft.fillRect(10, 10, 100, 60, TFT_RED);
+tft.fillRoundRect(20, 80, 100, 60, 10, TFT_CYAN);
+```
+
+### `fillScreen`
+
+`fillScreen` floods the entire display with a single color. This is the fastest way to clear between frames.
+
+```cpp
+void fillScreen(uint32_t color);
+```
+
+<ParamField path="color" type="uint32_t" required>Fill color.</ParamField>
+
+```cpp fillScreen.ino
+tft.fillScreen(TFT_BLACK);   // Clear the display to black
+```
+
+---
+
+## Circles
+
+### `drawCircle` and `fillCircle`
+
+Both functions use the midpoint circle algorithm for efficient rendering. `drawCircle` draws only the border; `fillCircle` paints the entire disc.
+
+```cpp
+void drawCircle(int32_t x, int32_t y, int32_t r, uint32_t color);
+void fillCircle(int32_t x, int32_t y, int32_t r, uint32_t color);
+```
+
+<ParamField path="x" type="int32_t" required>X coordinate of the center.</ParamField>
+<ParamField path="y" type="int32_t" required>Y coordinate of the center.</ParamField>
+<ParamField path="r" type="int32_t" required>Radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t" required>Outline or fill color.</ParamField>
+
+```cpp circles.ino
+tft.drawCircle(120, 120, 50, TFT_WHITE);   // Circle outline
+tft.fillCircle(120, 120, 50, TFT_WHITE);   // Filled disc
+```
+
+---
+
+## Ellipses
+
+### `drawEllipse` and `fillEllipse`
+
+Ellipses accept independent horizontal and vertical radii, letting you render shapes anywhere between a circle and a flat oval.
+
+```cpp
+void drawEllipse(int16_t x, int16_t y, int32_t rx, int32_t ry, uint16_t color);
+void fillEllipse(int16_t x, int16_t y, int32_t rx, int32_t ry, uint16_t color);
+```
+
+<ParamField path="x" type="int16_t" required>X coordinate of the center.</ParamField>
+<ParamField path="y" type="int16_t" required>Y coordinate of the center.</ParamField>
+<ParamField path="rx" type="int32_t" required>Horizontal radius (semi-axis along X) in pixels.</ParamField>
+<ParamField path="ry" type="int32_t" required>Vertical radius (semi-axis along Y) in pixels.</ParamField>
+<ParamField path="color" type="uint16_t" required>Outline or fill color.</ParamField>
+
+```cpp ellipses.ino
+tft.drawEllipse(120, 120, 60, 25, TFT_YELLOW);   // Wide, shallow outline
+tft.fillEllipse(120, 120, 60, 25, TFT_YELLOW);   // Filled
+```
+
+---
+
+## Triangles
+
+### `drawTriangle` and `fillTriangle`
+
+Both functions accept three vertex coordinates and draw an arbitrary triangle — there are no orientation constraints.
+
+```cpp
+void drawTriangle(int32_t x1, int32_t y1,
+                  int32_t x2, int32_t y2,
+                  int32_t x3, int32_t y3,
+                  uint32_t color);
+
+void fillTriangle(int32_t x1, int32_t y1,
+                  int32_t x2, int32_t y2,
+                  int32_t x3, int32_t y3,
+                  uint32_t color);
+```
+
+<ParamField path="x1, y1" type="int32_t" required>First vertex coordinates.</ParamField>
+<ParamField path="x2, y2" type="int32_t" required>Second vertex coordinates.</ParamField>
+<ParamField path="x3, y3" type="int32_t" required>Third vertex coordinates.</ParamField>
+<ParamField path="color" type="uint32_t" required>Outline or fill color.</ParamField>
+
+```cpp triangles.ino
+tft.drawTriangle(60, 10, 120, 110, 10, 110, TFT_YELLOW);   // Outline only
+tft.fillTriangle(60, 10, 120, 110, 10, 110, TFT_YELLOW);   // Filled
+```
+
+---
+
+## Gradient Fills
+
+### `fillRectVGradient` and `fillRectHGradient`
+
+These functions fill a rectangular region with a smooth linear color gradient — vertical (top-to-bottom) or horizontal (left-to-right). Each row (or column) is interpolated independently between the two endpoint colors.
+
+```cpp
+void fillRectVGradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color1, uint32_t color2);
+void fillRectHGradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color1, uint32_t color2);
+```
+
+<ParamField path="x" type="int16_t" required>X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int16_t" required>Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int16_t" required>Width in pixels.</ParamField>
+<ParamField path="h" type="int16_t" required>Height in pixels.</ParamField>
+<ParamField path="color1" type="uint32_t" required>Start color — top edge for vertical, left edge for horizontal.</ParamField>
+<ParamField path="color2" type="uint32_t" required>End color — bottom edge for vertical, right edge for horizontal.</ParamField>
+
+```cpp gradients.ino
+// Vertical: blue at top fading to black at bottom
+tft.fillRectVGradient(0, 0, 320, 120, TFT_BLUE, TFT_BLACK);
+
+// Horizontal: red at left fading to yellow at right
+tft.fillRectHGradient(0, 120, 320, 120, TFT_RED, TFT_YELLOW);
+```
+
+---
+
+## Practical Example
+
+The sketch below combines the primitives covered above to draw a simple scene on a 320×240 display.
+
+```cpp shapes.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Sky — vertical gradient
+  tft.fillRectVGradient(0, 0, 320, 140, TFT_NAVY, TFT_BLACK);
+
+  // Ground
+  tft.fillRect(0, 140, 320, 100, 0x2444);  // dark green via color565 approximation
+
+  // Sun — filled yellow circle with white outline
+  tft.fillCircle(270, 45, 30, TFT_YELLOW);
+  tft.drawCircle(270, 45, 30, TFT_WHITE);
+
+  // House body
+  tft.fillRect(100, 110, 110, 90, TFT_LIGHTGREY);
+  tft.drawRect(100, 110, 110, 90, TFT_WHITE);
+
+  // Roof triangle
+  tft.fillTriangle(85, 110, 155, 55, 225, 110, TFT_RED);
+  tft.drawTriangle(85, 110, 155, 55, 225, 110, TFT_WHITE);
+
+  // Door
+  tft.fillRoundRect(138, 158, 34, 42, 5, tft.color565(139, 69, 19));
+
+  // Window
+  tft.fillRect(170, 122, 28, 28, TFT_CYAN);
+  tft.drawRect(170, 122, 28, 28, TFT_WHITE);
+
+  // Pond (ellipse)
+  tft.fillEllipse(55, 210, 42, 16, TFT_BLUE);
+  tft.drawEllipse(55, 210, 42, 16, TFT_WHITE);
+
+  // Path lines
+  tft.drawFastVLine(155, 200, 40, TFT_YELLOW);
+  tft.drawFastHLine(115, 220, 80, TFT_YELLOW);
+}
+
+void loop() {}
+```
+
+<Note>
+`TFT_LIGHTGREY` and other named constants may not be defined in every TFT_eSPI build. Replace any missing constants with `tft.color565(r, g, b)` — for example, `tft.color565(211, 211, 211)` for light grey.
+</Note>

@@ -1,0 +1,394 @@
+---
+title: "TFT_eSPI Cursor, Rotation, and SPI Transaction Methods"
+sidebarTitle: "Cursor & Rotation"
+description: "Reference for TFT_eSPI cursor positioning, display rotation, drawing origin, pixel push helpers, SPI transaction control, and the SPI instance accessor."
+---
+
+TFT_eSPI separates the concept of the **text cursor** (used by `print()` / `println()` and respected by `drawChar()`) from the **drawing origin** (a coordinate offset applied to all drawing commands). The display can be rotated to any of four orientations without reinitialising the hardware. Low-level pixel-streaming helpers (`pushColor()`, `pushColors()`, `pushBlock()`, `pushPixels()`) allow efficient bulk writes after the address window is set manually. SPI transactions can be batched with `startWrite()` / `endWrite()` for a significant throughput improvement when performing many consecutive drawing operations.
+
+## Method Summary
+
+| Method | Signature | Returns | Description |
+|---|---|---|---|
+| `setCursor()` | `setCursor(x, y[, font])` | `void` | Position the text cursor |
+| `getCursorX()` | `getCursorX(void)` | `int16_t` | Read cursor X position |
+| `getCursorY()` | `getCursorY(void)` | `int16_t` | Read cursor Y position |
+| `setRotation()` | `setRotation(uint8_t r)` | `void` | Set display orientation |
+| `getRotation()` | `getRotation(void)` | `uint8_t` | Read current orientation |
+| `setOrigin()` | `setOrigin(x, y)` | `void` | Set drawing coordinate offset |
+| `getOriginX()` | `getOriginX(void)` | `int32_t` | Read origin X offset |
+| `getOriginY()` | `getOriginY(void)` | `int32_t` | Read origin Y offset |
+| `invertDisplay()` | `invertDisplay(bool i)` | `void` | Invert panel colours |
+| `pushColor()` | `pushColor(color[, len])` | `void` | Write one or repeated colours |
+| `pushColors()` | `pushColors(data, len[, swap])` | `void` | Stream colour array |
+| `pushBlock()` | `pushBlock(color, len)` | `void` | Bulk fill colour block |
+| `pushPixels()` | `pushPixels(data_in, len)` | `void` | Stream raw pixel data |
+| `startWrite()` | `startWrite(void)` | `void` | Begin SPI transaction |
+| `endWrite()` | `endWrite(void)` | `void` | End SPI transaction |
+| `writeColor()` | `writeColor(color, len)` | `void` | Write colour inside transaction |
+| `setAttribute()` | `setAttribute(id, a)` | `void` | Set library feature flag |
+| `getAttribute()` | `getAttribute(id)` | `uint8_t` | Read library feature flag |
+| `getSPIinstance()` | `getSPIinstance(void)` | `SPIClass&` | Access the SPI handle |
+
+---
+
+## setCursor() — Position the Text Cursor
+
+```cpp
+void setCursor(int16_t x, int16_t y)
+void setCursor(int16_t x, int16_t y, uint8_t font)
+```
+
+Sets the text cursor to the given screen coordinates. The three-argument overload also activates the specified font. The cursor position is used by `print()`, `println()`, and `drawChar()` when no explicit coordinate is provided.
+
+<ParamField path="x" type="int16_t">X coordinate for the cursor (top-left of the next character).</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate for the cursor.</ParamField>
+<ParamField path="font" type="uint8_t">Font number to activate (1–8). Only available in the three-argument overload.</ParamField>
+
+```cpp title="Positioning the cursor and printing"
+tft.setCursor(10, 20);
+tft.setTextColor(TFT_WHITE, TFT_BLACK);
+tft.println("Hello!");
+
+// With simultaneous font selection
+tft.setCursor(10, 60, 4);
+tft.print("Font 4");
+```
+
+---
+
+## getCursorX() / getCursorY() — Read Cursor Position
+
+```cpp
+int16_t getCursorX(void)
+int16_t getCursorY(void)
+```
+
+Return the current text cursor coordinates. The cursor advances automatically after each character rendered by `print()` or `println()`, so these getters are useful for continuing text in a different colour or style after a `drawString()` call.
+
+<ResponseField name="return" type="int16_t">
+  Current cursor X or Y position in pixels.
+</ResponseField>
+
+```cpp title="Continuing text after a colour change"
+tft.setCursor(10, 30);
+tft.setTextColor(TFT_WHITE, TFT_BLACK);
+tft.print("Partial ");
+int16_t cx = tft.getCursorX(); // save position right after "Partial "
+tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+tft.setCursor(cx, 30);
+tft.print("coloured");
+```
+
+---
+
+## setRotation() — Set Display Orientation
+
+```cpp
+void setRotation(uint8_t r)
+```
+
+Rotates the display coordinate system without reinitialising the hardware. After rotation, `(0, 0)` is always the top-left corner of the new orientation, and `width()` / `height()` update accordingly.
+
+<ParamField path="r" type="uint8_t">
+  Rotation value (0–3):
+  - `0` — Portrait, 0° (default)
+  - `1` — Landscape, 90° clockwise
+  - `2` — Portrait, 180°
+  - `3` — Landscape, 270° clockwise
+</ParamField>
+
+```cpp title="Switching to landscape mode"
+tft.setRotation(1); // landscape
+tft.fillScreen(TFT_BLACK);
+```
+
+---
+
+## getRotation() — Read Current Orientation
+
+```cpp
+uint8_t getRotation(void)
+```
+
+Returns the current rotation setting as last set by `setRotation()`.
+
+<ResponseField name="return" type="uint8_t">
+  Value 0–3 matching the last call to `setRotation()`.
+</ResponseField>
+
+```cpp title="Conditionally changing orientation"
+if (tft.getRotation() != 1) {
+  tft.setRotation(1);
+}
+```
+
+---
+
+## setOrigin() — Set Drawing Coordinate Offset
+
+```cpp
+void setOrigin(int32_t x, int32_t y)
+```
+
+Sets a global coordinate offset applied to all subsequent drawing operations. Positive values shift the drawing origin right and down. This is distinct from the viewport — the viewport clips drawing, while the origin only translates coordinates without clipping.
+
+<ParamField path="x" type="int32_t">Horizontal offset in pixels. Positive values shift drawing to the right.</ParamField>
+<ParamField path="y" type="int32_t">Vertical offset in pixels. Positive values shift drawing downward.</ParamField>
+
+```cpp title="Offsetting all drawing by a margin"
+tft.setOrigin(20, 40); // all coordinates offset by (20, 40)
+tft.drawRect(0, 0, 50, 30, TFT_WHITE); // renders at screen (20, 40)
+tft.setOrigin(0, 0);   // reset to normal
+```
+
+---
+
+## getOriginX() / getOriginY() — Read Drawing Origin
+
+```cpp
+int32_t getOriginX(void)
+int32_t getOriginY(void)
+```
+
+Return the current drawing origin offset set by `setOrigin()`.
+
+<ResponseField name="return" type="int32_t">
+  Current X or Y origin offset in pixels.
+</ResponseField>
+
+---
+
+## invertDisplay() — Invert Panel Colours
+
+```cpp
+void invertDisplay(bool i)
+```
+
+Sends the hardware colour-inversion command to the display driver IC. Operates at the panel level with no CPU overhead per pixel. Useful for toggling between dark and light themes.
+
+<ParamField path="i" type="bool">`true` to invert colours; `false` to restore normal colours.</ParamField>
+
+```cpp title="Flashing the display inverted"
+tft.invertDisplay(true);
+delay(500);
+tft.invertDisplay(false);
+```
+
+---
+
+## pushColor() — Push a Single Colour
+
+```cpp
+void pushColor(uint16_t color)
+void pushColor(uint16_t color, uint32_t len)
+```
+
+Writes one or `len` copies of `color` to the current address window. The address window must be set in advance with `setAddrWindow()` or `setWindow()` before calling this method.
+
+<ParamField path="color" type="uint16_t">RGB565 colour to push.</ParamField>
+<ParamField path="len" type="uint32_t">Number of pixels to write. Only used in the two-argument overload.</ParamField>
+
+```cpp title="Filling an address window with a solid colour"
+tft.setAddrWindow(10, 10, 50, 50);
+tft.pushColor(TFT_RED, 50 * 50); // fill the 50×50 window with red
+```
+
+---
+
+## pushColors() — Push an Array of Colours
+
+```cpp
+void pushColors(uint16_t *data, uint32_t len, bool swap = true)
+void pushColors(uint8_t  *data, uint32_t len)
+```
+
+Streams an array of pixel values into the current address window. The first overload accepts 16-bit RGB565 data and byte-swaps each word by default. The second overload accepts raw 8-bit data and sends it verbatim.
+
+<ParamField path="data" type="uint16_t * or uint8_t *">Pointer to pixel colour data.</ParamField>
+<ParamField path="len" type="uint32_t">Number of pixels (16-bit overload) or bytes (8-bit overload) to push.</ParamField>
+<ParamField path="swap" type="bool">If `true` (default), byte-swaps each 16-bit value before sending. Only applies to the 16-bit overload.</ParamField>
+
+```cpp title="Pushing a pixel array to a window"
+uint16_t pixels[100];
+// fill pixels[] with values ...
+tft.setAddrWindow(0, 0, 10, 10);
+tft.pushColors(pixels, 100, true);
+```
+
+---
+
+## pushBlock() — Push a Solid Colour Block
+
+```cpp
+void pushBlock(uint16_t color, uint32_t len)
+```
+
+Writes `len` copies of `color` to the SPI bus as efficiently as possible, bypassing the CS assertion loop on platforms that support block transfers. This is the lowest-latency way to fill a pre-set address window with a single colour.
+
+<ParamField path="color" type="uint16_t">RGB565 fill colour.</ParamField>
+<ParamField path="len" type="uint32_t">Number of pixels to write.</ParamField>
+
+---
+
+## pushPixels() — Push Raw Pixel Data
+
+```cpp
+void pushPixels(const void *data_in, uint32_t len)
+```
+
+Sends raw pixel data directly to the SPI interface. The data must already be in the correct byte order for the display. This method is used internally by sprite and image push routines.
+
+<ParamField path="data_in" type="const void *">Pointer to raw pixel data in display-native byte order.</ParamField>
+<ParamField path="len" type="uint32_t">Number of pixels to send.</ParamField>
+
+---
+
+## startWrite() / endWrite() / writeColor() — SPI Transaction Batching
+
+```cpp
+void startWrite(void)
+void endWrite(void)
+void writeColor(uint16_t color, uint32_t len)
+```
+
+`startWrite()` asserts the chip-select line and begins an SPI transaction, holding it open across multiple draw calls. `endWrite()` releases the chip-select. Batching multiple operations between `startWrite()` and `endWrite()` eliminates the CS toggle overhead between calls and can significantly increase throughput.
+
+`writeColor()` writes `len` pixels of `color` inside an already-open transaction without managing CS. It must always be called between a matching `startWrite()` / `endWrite()` pair.
+
+<ParamField path="color" type="uint16_t">RGB565 colour for `writeColor()`.</ParamField>
+<ParamField path="len" type="uint32_t">Number of pixels for `writeColor()`.</ParamField>
+
+```cpp title="Batching draw calls in a single transaction"
+tft.startWrite();
+  tft.setAddrWindow(0, 0, 240, 320);
+  for (int i = 0; i < 240 * 320; i++) {
+    tft.writeColor(TFT_NAVY, 1);
+  }
+tft.endWrite();
+```
+
+<Tip>
+  Wrapping many drawing calls in a single `startWrite()` / `endWrite()` pair significantly reduces SPI overhead. For DMA transfers, use `pushImageDMA()` inside the transaction instead.
+</Tip>
+
+---
+
+## setAttribute() / getAttribute() — Library Feature Flags
+
+```cpp
+void    setAttribute(uint8_t id = 0, uint8_t a = 0)
+uint8_t getAttribute(uint8_t id = 0)
+```
+
+Enable or disable optional library features at runtime using named attribute IDs.
+
+### Attribute ID Reference
+
+| ID Constant | Value | Default | Description |
+|---|---|---|---|
+| `CP437_SWITCH` | 1 | off | Enable CP437 GLCD font error correction |
+| `UTF8_SWITCH` | 2 | on | Enable UTF-8 decoding in the `write()` stream |
+| `PSRAM_ENABLE` | 3 | off | Enable PSRAM for sprites and internal buffers |
+
+**CP437_SWITCH** corrects a historical mapping error in the original IBM CP437 font where character 176 (°) and others were shifted. Enable this when displaying text that uses the degree symbol or box-drawing characters through the GLCD font.
+
+**UTF8_SWITCH** allows the `print()` / `println()` stream path to decode multi-byte UTF-8 sequences into Unicode code points before rendering. This is enabled by default and should remain on unless you are sending raw 8-bit character codes that conflict with UTF-8 multi-byte headers.
+
+**PSRAM_ENABLE** instructs `TFT_eSprite` to allocate its pixel buffer in PSRAM (external RAM) rather than internal SRAM. Requires an ESP32 board with PSRAM fitted and enabled in the board configuration.
+
+<ParamField path="id" type="uint8_t">
+  Feature identifier: `CP437_SWITCH` (1), `UTF8_SWITCH` (2), or `PSRAM_ENABLE` (3).
+</ParamField>
+<ParamField path="a" type="uint8_t">Value to set: `1` / `true` to enable, `0` / `false` to disable.</ParamField>
+
+<ResponseField name="getAttribute return" type="uint8_t">
+  Current value (0 or 1) of the specified attribute.
+</ResponseField>
+
+```cpp title="Configuring library attributes"
+tft.setAttribute(UTF8_SWITCH,  true);  // enable UTF-8 stream decoding (default)
+tft.setAttribute(CP437_SWITCH, true);  // enable CP437 corrections
+tft.setAttribute(PSRAM_ENABLE, true);  // route sprite memory to PSRAM
+
+uint8_t utf8State = tft.getAttribute(UTF8_SWITCH); // read back current state
+```
+
+---
+
+## getSPIinstance() — Access the SPI Class Handle
+
+```cpp
+static SPIClass& getSPIinstance(void)
+```
+
+Returns a reference to the `SPIClass` instance managed by TFT_eSPI. Use this when another SPI device shares the bus and you need to coordinate bus access or adjust settings such as the clock frequency between devices.
+
+<ResponseField name="return" type="SPIClass&">
+  Reference to the SPI instance used by TFT_eSPI.
+</ResponseField>
+
+<Note>
+  `getSPIinstance()` is not available when `TFT_PARALLEL_8_BIT` or `RP2040_PIO_INTERFACE` is defined, as those interfaces do not use the Arduino SPI class.
+</Note>
+
+```cpp title="Changing SPI clock frequency"
+SPIClass& spi = TFT_eSPI::getSPIinstance();
+spi.setFrequency(8000000); // reduce SPI clock to 8 MHz
+```
+
+---
+
+## Complete Example
+
+```cpp title="Cursor, rotation, and transaction batching"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+
+  // Enable UTF-8 and CP437 corrections
+  tft.setAttribute(UTF8_SWITCH,  true);
+  tft.setAttribute(CP437_SWITCH, true);
+
+  // Start in landscape mode
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Use cursor for streaming text
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextFont(2);
+  tft.setCursor(5, 5);
+  tft.print("Rotation: ");
+  tft.println(tft.getRotation());
+
+  // Multi-line layout using cursor reads
+  tft.setCursor(5, 30);
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.print("X: ");
+  int16_t cx = tft.getCursorX();
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.setCursor(cx, 30);
+  tft.println("cursor demo");
+
+  // Batch many solid rectangles in a single transaction
+  tft.startWrite();
+  for (int i = 0; i < 16; i++) {
+    uint16_t c = tft.color565(i * 16, 0, 255 - i * 16);
+    tft.setAddrWindow(i * 20, 60, 19, 40);
+    tft.pushBlock(c, 19 * 40);
+  }
+  tft.endWrite();
+
+  // Switch to portrait and redraw
+  tft.setRotation(0);
+  tft.fillScreen(TFT_DARKGREY);
+  tft.setCursor(5, 5);
+  tft.setTextColor(TFT_WHITE, TFT_DARKGREY);
+  tft.println("Portrait mode");
+}
+
+void loop() {}
+```

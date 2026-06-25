@@ -1,0 +1,190 @@
+---
+title: "Viewports and Clipping Regions in TFT_eSPI Displays"
+sidebarTitle: "Viewport"
+description: "Constrain all drawing to a rectangular sub-region of the screen using TFT_eSPI's viewport and clipping system, with optional datum-relative coordinates."
+---
+
+A **viewport** is a rectangular clipping region that constrains all subsequent drawing operations to a defined area of the screen. Any pixels that would fall outside the viewport are silently discarded — the display hardware outside that region is never touched. This makes viewports useful for building windowed UIs, protecting status bars from being overwritten, and optimising partial-screen updates by ensuring drawing calls can never stray into unintended areas.
+
+TFT_eSPI signals viewport capability at compile time via the `TFT_ESPI_FEATURES` constant: bit 0 set (`#define TFT_ESPI_FEATURES 1`) indicates that the viewport API is available.
+
+## Setting a Viewport
+
+```cpp title="setViewport signature"
+void setViewport(int32_t x, int32_t y, int32_t w, int32_t h,
+                 bool vpDatum = true);
+```
+
+| Parameter  | Type      | Description |
+|------------|-----------|-------------|
+| `x`        | `int32_t` | X coordinate of the viewport's top-left corner in **screen** coordinates |
+| `y`        | `int32_t` | Y coordinate of the viewport's top-left corner in **screen** coordinates |
+| `w`        | `int32_t` | Width of the viewport in pixels |
+| `h`        | `int32_t` | Height of the viewport in pixels |
+| `vpDatum`  | `bool`    | When `true` (default), drawing coordinates become **relative to the viewport's top-left corner**. When `false`, coordinates remain absolute screen coordinates and the viewport only clips. |
+
+### vpDatum: Relative vs. Absolute Coordinates
+
+The `vpDatum` flag controls how your drawing coordinates are interpreted once the viewport is active.
+
+<Tabs>
+  <Tab title="vpDatum = true (default)">
+    Coordinate `(0, 0)` maps to the **top-left corner of the viewport**. Drawing calls are positioned relative to the viewport, making it easy to reuse layout code across different screen positions.
+
+    ```cpp title="Viewport with datum-relative coordinates"
+    tft.setViewport(40, 30, 160, 120);  // vpDatum = true by default
+
+    // (5, 5) is 5px right and 5px down from the viewport corner,
+    // which is (45, 35) in absolute screen coordinates
+    tft.drawString("Inside viewport", 5, 5, 2);
+    ```
+  </Tab>
+  <Tab title="vpDatum = false">
+    Coordinate `(0, 0)` still maps to the **top-left of the physical screen**. The viewport clips drawing to its boundary, but you address pixels in screen space.
+
+    ```cpp title="Viewport with absolute coordinates"
+    // Viewport at (100, 50) — coords stay absolute
+    tft.setViewport(100, 50, 200, 100, false);
+
+    // This draws at absolute (120, 70) — inside the viewport
+    tft.fillRect(120, 70, 40, 40, TFT_GREEN);
+
+    // This is clipped: (50, 50) falls outside the viewport boundary
+    tft.fillRect(50, 50, 40, 40, TFT_RED);  // No-op
+    ```
+  </Tab>
+</Tabs>
+
+## Viewport Setup and Teardown
+
+```cpp title="resetViewport signature"
+void resetViewport(void);
+```
+
+`resetViewport()` clears the clipping region and restores the full screen as the drawing area. After calling it, coordinates are once again absolute screen coordinates regardless of what `vpDatum` was set to.
+
+### Multi-Panel UI Example
+
+The example below divides a 320×240 display into two side-by-side panels and draws independently into each one, using viewports to ensure neither panel's content bleeds into the other.
+
+```cpp title="Two-panel UI using viewports"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_DARKGREY);
+
+  // ── Left panel ──────────────────────────────────────────────
+  tft.setViewport(0, 0, 160, 240);           // Left half of screen
+  tft.fillScreen(TFT_NAVY);
+  tft.setTextColor(TFT_WHITE, TFT_NAVY);
+  tft.drawString("Left Panel", 5, 5, 2);
+  tft.frameViewport(TFT_YELLOW, 2);          // 2-pixel border
+  tft.resetViewport();
+
+  // ── Right panel ─────────────────────────────────────────────
+  tft.setViewport(160, 0, 160, 240);         // Right half of screen
+  tft.fillScreen(TFT_MAROON);
+  tft.setTextColor(TFT_WHITE, TFT_MAROON);
+  tft.drawString("Right Panel", 5, 5, 2);
+  tft.frameViewport(TFT_CYAN, 2);
+  tft.resetViewport();
+}
+```
+
+## Viewport Getter Methods
+
+Once a viewport is active you can query its parameters at any time:
+
+| Method                  | Return type | Description |
+|-------------------------|-------------|-------------|
+| `getViewportX()`        | `int32_t`   | X origin of the viewport in screen coordinates |
+| `getViewportY()`        | `int32_t`   | Y origin of the viewport in screen coordinates |
+| `getViewportWidth()`    | `int32_t`   | Width of the viewport in pixels |
+| `getViewportHeight()`   | `int32_t`   | Height of the viewport in pixels |
+| `getViewportDatum()`    | `bool`      | `true` if the coordinate datum is relative to the viewport origin |
+
+```cpp title="Printing current viewport parameters"
+Serial.printf("Viewport: x=%d  y=%d  w=%d  h=%d  datum=%d\n",
+  tft.getViewportX(),
+  tft.getViewportY(),
+  tft.getViewportWidth(),
+  tft.getViewportHeight(),
+  tft.getViewportDatum());
+```
+
+## Checking for Viewport Intersection
+
+```cpp title="checkViewport signature"
+bool checkViewport(int32_t x, int32_t y, int32_t w, int32_t h);
+```
+
+`checkViewport()` returns `true` if the rectangle described by `(x, y, w, h)` intersects the current viewport. Use it to skip expensive drawing operations entirely when nothing would be visible — a quick win for sprite-heavy or animation-heavy sketches:
+
+```cpp title="Skipping invisible sprite pushes"
+if (tft.checkViewport(spriteX, spriteY, spriteW, spriteH)) {
+  spr.pushSprite(spriteX, spriteY);  // Only push if at least partly visible
+}
+```
+
+## Drawing a Frame Around the Viewport
+
+```cpp title="frameViewport signature"
+void frameViewport(uint16_t color, int32_t w);
+```
+
+`frameViewport()` draws a rectangle `w` pixels wide in `color` around the current viewport boundary. The frame is rendered **outside** the viewport, so the interior clipping region is unaffected. This is handy for visually highlighting the active region during development, or for drawing panel borders in a UI.
+
+```cpp title="Drawing a 3-pixel orange border"
+tft.frameViewport(TFT_ORANGE, 3);
+```
+
+## Direct CGRAM Window Control
+
+For advanced low-level use, TFT_eSPI exposes direct control over the display's CGRAM address window — the rectangular region within the display driver that the next batch of pixel data will be written into.
+
+```cpp title="setWindow and setAddrWindow signatures"
+virtual void setWindow(int32_t xs, int32_t ys, int32_t xe, int32_t ye);
+void         setAddrWindow(int32_t xs, int32_t ys, int32_t w, int32_t h);
+```
+
+- **`setWindow(xs, ys, xe, ye)`** — sets the CGRAM window using inclusive start and end coordinates.
+- **`setAddrWindow(xs, ys, w, h)`** — convenience wrapper that takes a top-left origin plus width and height instead of end coordinates.
+
+These calls position the display driver's write pointer. Subsequent `pushColor()` or `writeColor()` calls fill the window row by row. You must bracket the entire operation with `startWrite()` and `endWrite()`:
+
+```cpp title="Filling a window directly with writeColor"
+tft.startWrite();
+tft.setAddrWindow(10, 10, 50, 50);          // 50×50 region at (10, 10)
+for (int i = 0; i < 50 * 50; i++) {
+  tft.writeColor(TFT_CYAN, 1);
+}
+tft.endWrite();
+```
+
+### Clipping Window Helpers
+
+Two boolean helpers check whether a given window intersects the current viewport and **clip the coordinates in place** to the intersection:
+
+```cpp title="Clipping helpers"
+bool clipAddrWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h);
+bool clipWindow(int32_t* xs, int32_t* ys, int32_t* xe, int32_t* ye);
+```
+
+- `clipAddrWindow()` works with origin + size format (`x, y, w, h`).
+- `clipWindow()` works with start + end format (`xs, ys, xe, ye`).
+
+Both return `false` if the rectangle lies entirely outside the current viewport, letting you bail out before doing any work. They return `true` and modify the pointed-to values to the clipped coordinates when partial overlap exists.
+
+<Note>
+  You can check at runtime whether viewport support is compiled in by inspecting `TFT_ESPI_FEATURES`. Bit 0 set means viewport capability is available:
+
+  ```cpp
+  if (TFT_ESPI_FEATURES & 0x01) {
+    tft.setViewport(0, 0, 160, 120);
+  }
+  ```
+</Note>

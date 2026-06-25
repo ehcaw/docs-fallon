@@ -1,0 +1,143 @@
+---
+title: "TFT Display Initialization, Rotation, and Coordinate Setup"
+sidebarTitle: "Display Fundamentals"
+description: "Learn how to instantiate TFT_eSPI, initialize your display with init() or begin(), configure rotation modes 0–3, and understand the pixel coordinate system."
+---
+
+Working with TFT_eSPI begins with creating a class instance and running a handful of setup calls before any pixels can appear on screen. This page walks you through every step of that process — from the constructor and initialization methods, through rotation modes, to the coordinate system that governs where everything is drawn.
+
+## Instantiating TFT_eSPI
+
+The `TFT_eSPI` class is the central object you interact with throughout your sketch. Declare one global instance before `setup()` so it is accessible everywhere in your program.
+
+```cpp
+// Use the dimensions defined in User_Setup.h (most common)
+TFT_eSPI tft = TFT_eSPI();
+
+// Or explicitly override width and height at construction time
+TFT_eSPI tft = TFT_eSPI(320, 240);
+```
+
+**Constructor signature:**
+
+```cpp
+TFT_eSPI(int16_t _W = TFT_WIDTH, int16_t _H = TFT_HEIGHT)
+```
+
+Both parameters default to the values set in your `User_Setup.h` configuration file, so the no-argument form is almost always correct. Providing explicit dimensions is useful when you want to use a smaller logical canvas than the physical panel.
+
+## Initializing the Display
+
+Before any drawing function will work you must call `init()` (or its alias `begin()`). Both methods perform the same hardware initialization sequence — `begin()` exists purely for backwards compatibility with older sketches.
+
+```cpp
+void TFT_eSPI::init(uint8_t tc = TAB_COLOUR);
+void TFT_eSPI::begin(uint8_t tc = TAB_COLOUR);
+```
+
+The optional `tc` (tab colour) parameter applies only to **ST7735** displays and selects the display variant. For every other controller you can omit it entirely and rely on the `TAB_COLOUR` default.
+
+<Note>
+  `init()` and `begin()` are fully interchangeable. New sketches should prefer `init()` for clarity, but both compile to identical code.
+</Note>
+
+## Configuring Screen Rotation
+
+After initialization you will typically call `setRotation()` to orient the display correctly for your enclosure or use case.
+
+```cpp
+void TFT_eSPI::setRotation(uint8_t m);
+```
+
+The `m` parameter accepts values **0–3**, each rotating the coordinate system by a multiple of 90 degrees:
+
+| Value | Orientation              | `width()`  | `height()` |
+|:-----:|--------------------------|:----------:|:----------:|
+| `0`   | Portrait (default)       | native W   | native H   |
+| `1`   | Landscape (90° CW)       | native H   | native W   |
+| `2`   | Portrait flipped (180°)  | native W   | native H   |
+| `3`   | Landscape flipped (270°) | native H   | native W   |
+
+Values `4–7` are also accepted and mirror their `0–3` counterparts for use with BMP drawing routines.
+
+<Tip>
+  Always call `setRotation()` **before** your first drawing command. Changing rotation mid-sketch does not redraw existing pixels — clear the screen with `fillScreen()` after rotating to avoid visual artefacts.
+</Tip>
+
+## Complete Setup Example
+
+The following is a typical `setup()` function drawn directly from library examples:
+
+```cpp
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();                          // Initialize the display hardware
+  tft.setRotation(1);                  // Landscape orientation
+
+  tft.fillScreen(TFT_BLACK);          // Clear screen to black
+  tft.setCursor(0, 0);                // Move text cursor to top-left
+  tft.setTextColor(TFT_WHITE);        // White text, transparent background
+  tft.setTextSize(2);                 // 2× size multiplier
+  tft.setTextFont(2);                 // Built-in 16 px font
+  tft.println("Hello World!");
+}
+
+void loop() {
+  // Drawing and updates go here
+}
+```
+
+<Steps>
+  <Step title="Declare the instance">
+    Create a global `TFT_eSPI tft` before `setup()` so the object is accessible from every function in your sketch.
+  </Step>
+  <Step title="Call init() or begin()">
+    Run `tft.init()` at the very start of `setup()` to configure SPI, reset the panel, and apply driver settings from your `User_Setup.h`.
+  </Step>
+  <Step title="Set rotation">
+    Call `tft.setRotation(n)` immediately after init to establish the coordinate system before issuing any drawing commands.
+  </Step>
+  <Step title="Clear the screen">
+    Use `tft.fillScreen(TFT_BLACK)` to start with a known blank canvas and erase any display power-on garbage.
+  </Step>
+  <Step title="Draw content">
+    Position text with `setCursor()`, configure colors and fonts, then call `print()`, `drawString()`, or any drawing primitive you need.
+  </Step>
+</Steps>
+
+## The Coordinate System
+
+TFT_eSPI uses a **pixel-based Cartesian coordinate system** with the origin `(0, 0)` fixed at the **top-left corner** of the display after rotation is applied:
+
+- The **X axis** increases from left to right.
+- The **Y axis** increases from top to bottom.
+- Every coordinate is expressed in whole pixels.
+
+This means the bottom-right corner of a 320 × 240 display in landscape mode sits at `(319, 239)`.
+
+## Querying Current Dimensions
+
+After you call `setRotation()` the logical width and height of the screen change. Use the two dimension accessors to write rotation-aware layout code:
+
+```cpp
+int16_t TFT_eSPI::width(void);   // Current width in pixels
+int16_t TFT_eSPI::height(void);  // Current height in pixels
+```
+
+Both methods return the **rotated** dimensions, so `width()` and `height()` always reflect what is currently visible on screen:
+
+```cpp
+// Works correctly in any rotation
+int centerX = tft.width()  / 2;
+int centerY = tft.height() / 2;
+
+tft.setCursor(centerX, centerY);
+tft.print("Centered!");
+```
+
+<Note>
+  `width()` and `height()` are virtual methods inherited through the display driver chain, so they also work correctly on `TFT_eSprite` objects that share the same coordinate API.
+</Note>

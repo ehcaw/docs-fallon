@@ -1,0 +1,229 @@
+---
+title: "DMA Transfers and TFT_eSPI Performance Optimization"
+sidebarTitle: "DMA & Performance"
+description: "Leverage DMA transfers, double-buffered sprites, and bulk SPI transaction APIs to maximize TFT_eSPI rendering throughput on ESP32, RP2040, and STM32."
+---
+
+TFT_eSPI is engineered from the ground up for speed, and Direct Memory Access (DMA) is its most powerful performance tool. DMA lets the processor hand off a block of pixel data to the SPI peripheral and immediately return to application code — the pixel transfer continues in the background without occupying the CPU. Combined with double-buffering, this lets you compose the next frame while the previous one is still being sent to the display, eliminating the CPU idle time that would otherwise be wasted waiting for SPI transfers to complete.
+
+## DMA Platform Support
+
+DMA availability depends on both the processor family and the interface type in use. Parallel interfaces on ESP32 do not support DMA through this library.
+
+| Processor           | SPI DMA  | 8-bit Parallel DMA | 16-bit Parallel DMA |
+|---------------------|----------|--------------------|---------------------|
+| RP2040              | ✅ Yes   | ✅ Yes             | ✅ Yes              |
+| ESP32               | ✅ Yes   | ❌ No              | ❌ N/A              |
+| ESP32-S3            | ✅ Yes   | ❌ No              | ❌ N/A              |
+| ESP32-C3 / S2       | ❌ No    | ❌ N/A             | ❌ N/A              |
+| STM32Fxxx           | ✅ Yes   | ❌ No              | ❌ N/A              |
+| ESP8266             | ❌ No    | ❌ N/A             | ❌ N/A              |
+| Other / Generic     | ❌ No    | ❌ N/A             | ❌ N/A              |
+
+<Note>
+  Some ILI9xxx display controllers (ILI9481, ILI9486, ILI9488) do not support DMA even over SPI because they require an 18-bit pixel format that the standard 16-bit DMA path cannot supply.
+</Note>
+
+## Initialising DMA
+
+```cpp title="initDMA and deInitDMA signatures"
+bool initDMA(bool ctrl_cs = false);
+void deInitDMA(void);
+```
+
+Call `initDMA()` once in `setup()` before issuing any DMA transfer. When `ctrl_cs` is `true`, the library manages the chip-select pin automatically during transfers — this is the recommended setting for most setups. The function returns `true` on success.
+
+```cpp title="Enabling DMA in setup()"
+void setup() {
+  tft.init();
+  tft.initDMA(true);    // Enable DMA with automatic CS control
+}
+```
+
+Call `deInitDMA()` to release DMA resources. This is rarely needed in normal use but is available for applications that must share DMA channels with other peripherals.
+
+You can check at any point whether DMA has been successfully initialised by reading the public boolean `DMA_Enabled`:
+
+```cpp title="Checking DMA status"
+if (tft.DMA_Enabled) {
+  Serial.println("DMA is active");
+}
+```
+
+## Synchronisation: dmaBusy() and dmaWait()
+
+```cpp title="DMA synchronisation signatures"
+bool dmaBusy(void);
+void dmaWait(void);
+```
+
+`dmaBusy()` returns `true` while a DMA transfer is in progress. `dmaWait()` blocks until the current transfer completes. You **must** call `dmaWait()` (or poll `dmaBusy()`) before modifying any buffer that was handed to a DMA transfer — the DMA controller is still reading from it until the transfer finishes.
+
+```cpp title="Waiting before reusing a DMA buffer"
+// Wait for any previous DMA transfer to finish before reusing the buffer
+tft.dmaWait();
+```
+
+<Warning>
+  Modifying a pixel buffer while DMA is still transferring it will corrupt the pixels being sent and may cause a crash on some platforms. Always call `dmaWait()` before writing into a buffer that was passed to `pushImageDMA()` or `pushPixelsDMA()`.
+</Warning>
+
+## Transferring Pixel Data via DMA
+
+```cpp title="DMA transfer method signatures"
+void pushImageDMA(int32_t x, int32_t y, int32_t w, int32_t h,
+                  uint16_t *data, uint16_t *buffer = nullptr);
+
+void pushPixelsDMA(uint16_t *image, uint32_t len);
+```
+
+- **`pushImageDMA(x, y, w, h, data, buffer)`** — transfers a rectangular pixel array to the display at position `(x, y)`. The optional `buffer` argument enables double-buffering: while `data` is being transferred by DMA, your code writes the next frame into `buffer`. On the next call, swap the two pointers.
+- **`pushPixelsDMA(image, len)`** — streams `len` raw 16-bit pixels to the current CGRAM window without repositioning the address window first. Call `setAddrWindow()` before using this method.
+
+## Double-Buffering Pattern
+
+The key to maximum frame rates is overlapping CPU rendering with DMA transfer. Allocate two sprite buffers of equal size and alternate between them each frame.
+
+```cpp title="Double-buffered animation with DMA"
+#include <TFT_eSPI.h>
+
+TFT_eSPI    tft  = TFT_eSPI();
+TFT_eSprite sprA = TFT_eSprite(&tft);
+TFT_eSprite sprB = TFT_eSprite(&tft);
+
+#define W 240
+#define H 135
+
+void setup() {
+  tft.init();
+  tft.initDMA(true);
+  tft.fillScreen(TFT_BLACK);
+
+  sprA.setColorDepth(16);
+  sprB.setColorDepth(16);
+  sprA.createSprite(W, H);
+  sprB.createSprite(W, H);
+}
+
+void loop() {
+  static TFT_eSprite *drawSpr = &sprA;  // Sprite being drawn into
+  static TFT_eSprite *sendSpr = &sprB;  // Sprite being sent via DMA
+
+  // --- Render into the draw buffer ---
+  drawSpr->fillSprite(TFT_BLACK);
+  drawSpr->fillCircle(random(W), random(H), 20, random(0x10000));
+
+  // --- Wait for previous DMA transfer to finish ---
+  tft.dmaWait();
+
+  // --- Start DMA transfer of the send buffer ---
+  tft.pushImageDMA(0, 0, W, H, (uint16_t*)sendSpr->getPointer());
+
+  // --- Swap buffers: next loop draws into the old send buffer ---
+  TFT_eSprite *tmp = drawSpr;
+  drawSpr = sendSpr;
+  sendSpr = tmp;
+}
+```
+
+<Tip>
+  For the double-buffer swap to work correctly, both sprite buffers must be the same size and colour depth. Allocate them both with `setColorDepth(16)` before `createSprite()` and do not call `deleteSprite()` between frames.
+</Tip>
+
+## Bulk SPI Transfers
+
+### startWrite / endWrite Batching
+
+Every individual drawing call (`drawLine()`, `fillRect()`, etc.) internally calls `startWrite()` and `endWrite()` to assert the chip-select and manage the SPI transaction. When you call many drawing functions in sequence, this repeated CS toggling adds measurable overhead.
+
+Wrapping a batch of drawing calls inside a single `startWrite()` / `endWrite()` pair asserts CS only once for the entire sequence:
+
+```cpp title="Batching drawing calls with startWrite/endWrite"
+tft.startWrite();
+  tft.fillRect(0,   0,  80, 80, TFT_RED);
+  tft.fillRect(80,  0,  80, 80, TFT_GREEN);
+  tft.fillRect(160, 0,  80, 80, TFT_BLUE);
+  tft.drawString("RGB", 10, 30, 4);
+tft.endWrite();
+```
+
+<Tip>
+  Wrapping multiple drawing calls inside a `startWrite()` / `endWrite()` block is one of the easiest wins for rendering speed. The CS pin is asserted only once for the entire batch rather than once per call.
+</Tip>
+
+`writeColor(color, len)` writes `len` pixels of the same colour to the current CGRAM window directly, without any bounds-checking overhead. It must be called inside a `startWrite()` / `endWrite()` block.
+
+### pushBlock and pushPixels
+
+Two low-level methods bypass the higher-level drawing machinery entirely:
+
+```cpp title="Low-level bulk transfer signatures"
+void pushBlock(uint16_t color, uint32_t len);
+void pushPixels(const void *data, uint32_t len);
+```
+
+- **`pushBlock(color, len)`** — fills the current CGRAM window with `len` pixels of a single colour using optimised SPI burst code.
+- **`pushPixels(data, len)`** — streams arbitrary pixel data from a buffer. Byte-swap behaviour is controlled by `setSwapBytes()`.
+
+Both methods require an active CGRAM window (call `setAddrWindow()` first) and must be called inside a `startWrite()` / `endWrite()` block:
+
+```cpp title="Streaming a raw pixel buffer with pushPixels"
+uint16_t image[320 * 240];  // Pre-filled pixel buffer
+// … populate image[] …
+
+tft.startWrite();
+tft.setAddrWindow(0, 0, 320, 240);
+tft.pushPixels(image, 320 * 240);
+tft.endWrite();
+```
+
+## SPI Frequency Configuration
+
+SPI clock speed is the single biggest factor in raw throughput. Set `SPI_FREQUENCY` in `User_Setup.h` to the highest stable rate your wiring supports. The read frequency is configured separately because most display controllers require a slower clock for read-back operations:
+
+```cpp title="User_Setup.h — SPI frequency settings"
+#define SPI_FREQUENCY       40000000   // 40 MHz write
+#define SPI_READ_FREQUENCY  20000000   // 20 MHz for readPixel() etc.
+```
+
+### Platform-Specific Notes
+
+<Tabs>
+  <Tab title="ESP32">
+    The SPI clock is derived from the 80 MHz APB bus clock. While `SPI_FREQUENCY` can be set to 40 MHz, electrical effects on longer PCB traces often limit the reliable rate to approximately 26–27 MHz. ESP32-C3 and ESP32-S2 do not support DMA through this library.
+  </Tab>
+  <Tab title="RP2040">
+    The RP2040 uses a PIO-based SPI implementation that is not constrained by the same APB dividers as the ESP32. Clock rates of 62.5 MHz have been demonstrated on short PCB traces. Both SPI and 8/16-bit parallel interfaces support DMA on RP2040.
+  </Tab>
+  <Tab title="STM32">
+    DMA support is available on STM32Fxxx variants over SPI. The maximum reliable clock rate depends on the specific MCU variant and the APB2 prescaler setting for the SPI peripheral.
+  </Tab>
+</Tabs>
+
+## Runtime Library Attributes
+
+`setAttribute()` and `getAttribute()` configure boolean library capabilities at runtime. Three attribute IDs are defined:
+
+```cpp title="setAttribute / getAttribute signatures"
+void    setAttribute(uint8_t id, uint8_t a);
+uint8_t getAttribute(uint8_t id);
+
+#define CP437_SWITCH  1   // CP437 font character error correction
+#define UTF8_SWITCH   2   // UTF-8 decoding in print/write stream
+#define PSRAM_ENABLE  3   // Allow PSRAM allocation for Sprites (ESP32)
+```
+
+| ID | Constant        | Effect when `true` |
+|----|-----------------|---------------------|
+| 1  | `CP437_SWITCH`  | Applies CP437 glyph correction for the GLCD font |
+| 2  | `UTF8_SWITCH`   | Decodes multi-byte UTF-8 sequences in `print()` calls |
+| 3  | `PSRAM_ENABLE`  | `createSprite()` may allocate the pixel buffer from PSRAM |
+
+```cpp title="Enabling UTF-8 and PSRAM at runtime"
+tft.setAttribute(UTF8_SWITCH, true);    // Enable UTF-8 decoding
+tft.setAttribute(PSRAM_ENABLE, true);   // Enable PSRAM for sprites
+```
+
+<Note>
+  `PSRAM_ENABLE` is incompatible with `DMA_Enabled`. PSRAM on ESP32 is not DMA-capable, so the library disables PSRAM allocation automatically when DMA is active. Choose one strategy or the other for large buffers.
+</Note>

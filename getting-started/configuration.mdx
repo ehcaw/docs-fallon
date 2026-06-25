@@ -1,0 +1,203 @@
+---
+title: "Configure TFT_eSPI: Display Driver and Pin Setup"
+sidebarTitle: "Configuration"
+description: "Configure TFT_eSPI by editing User_Setup.h inside the library folder to declare your display driver, SPI pins, and clock frequency."
+---
+
+One of the most distinctive aspects of TFT_eSPI is that its hardware configuration does **not** live in your sketch — it lives inside the library itself. Before any sketch will compile and run correctly, you must tell the library which display controller chip you are using, which GPIO pins are wired to the display, and what SPI clock frequency to use. This is done by editing a file called `User_Setup.h` inside the library's installation folder. The upside is that once this is done, every bundled example sketch runs without any changes to the sketch code itself.
+
+<Warning>
+  Upgrading TFT_eSPI via the Arduino Library Manager or PlatformIO package manager will **replace `User_Setup.h`** and all other setup files with fresh copies, wiping your customizations. Always keep a backup of your `User_Setup.h` somewhere outside the library folder, or use PlatformIO's `build_flags` approach (see below) to keep configuration inside your own project.
+</Warning>
+
+## User_Setup.h vs User_Setup_Select.h
+
+The library ships with two top-level configuration mechanisms:
+
+| File | Purpose |
+|------|---------|
+| `User_Setup.h` | **Your primary configuration file.** Define your driver, pins, and frequencies here. This is the file you will edit for most projects. |
+| `User_Setup_Select.h` | **Multi-setup switcher.** Lets you maintain multiple pre-built setup files (e.g. `Setup1_ILI9341.h`, `Setup2_ST7735.h`) and activate one by uncommenting its `#include` line. Useful if you work with several different displays. |
+
+For most users, editing `User_Setup.h` directly is the simplest approach. Power users who swap between hardware configurations regularly will find `User_Setup_Select.h` convenient.
+
+## Configuration File Location
+
+| Operating System | Path |
+|-----------------|------|
+| Windows 10/11   | `C:\Users\<username>\Documents\Arduino\libraries\TFT_eSPI\` |
+| macOS           | `~/Documents/Arduino/libraries/TFT_eSPI/` |
+| Linux           | `~/Arduino/libraries/TFT_eSPI/` |
+
+Open `User_Setup.h` from the above path in any text editor or from within your IDE.
+
+## Key Configuration Options
+
+### 1. Display Driver Selection
+
+Uncomment exactly **one** driver `#define` to select your controller. All others must remain commented out.
+
+```cpp
+// Only uncomment the driver that matches your display controller:
+// #define ILI9163_DRIVER
+#define ILI9341_DRIVER       // ← most common SPI display
+// #define ILI9342_DRIVER
+// #define ILI9481_DRIVER
+// #define ILI9486_DRIVER
+// #define ILI9488_DRIVER
+// #define ST7735_DRIVER
+// #define ST7789_DRIVER
+// #define ST7796_DRIVER
+// #define HX8357D_DRIVER
+// #define GC9A01_DRIVER
+// #define SSD1351_DRIVER
+// #define SSD1963_DRIVER
+```
+
+### 2. SPI Pin Assignments
+
+Define the GPIO pin numbers that match your physical wiring:
+
+```cpp
+#define TFT_MOSI  23   // SPI data out (Master Out Slave In)
+#define TFT_SCLK  18   // SPI clock
+#define TFT_CS     5   // Chip select (active LOW)
+#define TFT_DC     2   // Data / Command control (RS / A0)
+#define TFT_RST    4   // Reset pin (set -1 if tied to MCU reset)
+#define TFT_MISO  19   // SPI data in — needed for touch / pixel readback
+```
+
+<Note>
+  If your display's reset pin is wired directly to the microcontroller's RESET line, set `#define TFT_RST -1` to tell TFT_eSPI not to drive it as a GPIO.
+</Note>
+
+### 3. SPI Frequency
+
+```cpp
+#define SPI_FREQUENCY    27000000   // 27 MHz — safe for most ILI9341 displays
+// #define SPI_FREQUENCY 40000000   // 40 MHz — use with short, clean wiring only
+#define SPI_READ_FREQUENCY 20000000 // Lower frequency for reading back pixel data
+#define SPI_TOUCH_FREQUENCY  2500000 // XPT2046 touch controller max ~2.5 MHz
+```
+
+### 4. Display Dimensions (if not set by driver default)
+
+Some drivers require explicit pixel dimensions when the default does not match your module:
+
+```cpp
+#define TFT_WIDTH  240
+#define TFT_HEIGHT 320
+```
+
+### 5. Interface Type Selection
+
+For 8-bit parallel displays uncomment the parallel interface define instead of using SPI pin definitions:
+
+```cpp
+// #define TFT_PARALLEL_8_BIT   // Use 8-bit parallel interface (ESP32 / RP2040 only)
+```
+
+## Full Example: ILI9341 on ESP32
+
+This is a complete, working `User_Setup.h` for a 240×320 ILI9341 SPI display wired to an ESP32 DevKit using the default VSPI pins:
+
+```cpp
+// User_Setup.h — ILI9341 on ESP32 (VSPI default pins)
+// Place this file in: ~/Documents/Arduino/libraries/TFT_eSPI/
+
+// ── Driver ──────────────────────────────────────────────────────────────
+#define ILI9341_DRIVER
+
+// ── Dimensions ──────────────────────────────────────────────────────────
+#define TFT_WIDTH  240
+#define TFT_HEIGHT 320
+
+// ── SPI Pins ─────────────────────────────────────────────────────────────
+#define TFT_MOSI 23
+#define TFT_SCLK 18
+#define TFT_CS    5
+#define TFT_DC    2
+#define TFT_RST   4
+#define TFT_MISO 19
+
+// ── SPI Frequencies ──────────────────────────────────────────────────────
+#define SPI_FREQUENCY     27000000
+#define SPI_READ_FREQUENCY 20000000
+#define SPI_TOUCH_FREQUENCY 2500000
+
+// ── Fonts ────────────────────────────────────────────────────────────────
+#define LOAD_GLCD    // Font 1 — default Adafruit 8-pixel font
+#define LOAD_FONT2   // Font 2 — small 16-pixel high font
+#define LOAD_FONT4   // Font 4 — medium 26-pixel high font
+#define LOAD_FONT6   // Font 6 — large 48-pixel font
+#define LOAD_FONT7   // Font 7 — 7-segment 48-pixel font
+#define LOAD_FONT8   // Font 8 — large 75-pixel font
+#define LOAD_GFXFF   // FreeFonts — load all Adafruit GFX free fonts
+#define SMOOTH_FONT  // Enable anti-aliased VLW font support
+```
+
+## ST7735 Tab Colour Option
+
+ST7735 displays come in several module variants with slightly different display windows and colour order, originally identified by a coloured PCB tab on the flexible ribbon cable (though this is not always a reliable indicator). If you see misaligned graphics, wrong colours, or stray pixels on the edges, select the correct variant by uncommenting exactly **one** of the following defines in `User_Setup.h`:
+
+```cpp
+#define ST7735_DRIVER
+
+// Uncomment ONE of the following to match your module variant.
+// Try each option if colours or alignment look wrong after uploading:
+// #define ST7735_INITB
+// #define ST7735_GREENTAB
+// #define ST7735_GREENTAB2      // Use if random pixels appear on two edges of a green tab display
+// #define ST7735_GREENTAB3      // Use if random pixels appear on edge(s) of a 128x128 screen
+// #define ST7735_GREENTAB128    // For 128x128 displays
+// #define ST7735_GREENTAB160x80 // For 160x80 displays (BGR, inverted, 26 pixel offset)
+// #define ST7735_REDTAB
+// #define ST7735_BLACKTAB
+// #define ST7735_REDTAB160x80   // For 160x80 displays with 24 pixel offset
+```
+
+## SDA Read Mode (TFT_SDA_READ)
+
+Some display modules share a single bidirectional data line for both writing and reading (SDA mode) rather than providing separate MOSI and MISO pins. Enable this mode with:
+
+```cpp
+#define TFT_SDA_READ   // Enable single-wire SDA read mode for displays
+                       // that share MOSI/MISO on one pin
+```
+
+<Note>
+  `TFT_SDA_READ` mode is only relevant when your display module physically ties the MOSI and MISO lines together or exposes only a single data pin. Standard 4-wire SPI displays with separate MISO and MOSI do not need this.
+</Note>
+
+## PlatformIO Per-Project Configuration
+
+PlatformIO users can avoid touching `User_Setup.h` entirely by declaring all settings as compiler defines in `platformio.ini`. The `USER_SETUP_LOADED` flag instructs TFT_eSPI to skip reading `User_Setup.h`:
+
+```ini
+[env:esp32dev]
+platform  = espressif32
+board     = esp32dev
+framework = arduino
+
+lib_deps = bodmer/TFT_eSPI
+
+build_flags =
+    -D USER_SETUP_LOADED=1
+    -D ILI9341_DRIVER=1
+    -D TFT_WIDTH=240
+    -D TFT_HEIGHT=320
+    -D TFT_MOSI=23
+    -D TFT_SCLK=18
+    -D TFT_CS=5
+    -D TFT_DC=2
+    -D TFT_RST=4
+    -D TFT_MISO=19
+    -D SPI_FREQUENCY=27000000
+    -D SPI_READ_FREQUENCY=20000000
+    -D LOAD_GLCD=1
+    -D LOAD_FONT2=1
+    -D LOAD_GFXFF=1
+    -D SMOOTH_FONT=1
+```
+
+This approach stores configuration in your project's version-controlled `platformio.ini`, so a library update never breaks your setup.

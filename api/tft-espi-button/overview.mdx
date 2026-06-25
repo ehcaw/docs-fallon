@@ -1,0 +1,87 @@
+---
+title: "TFT_eSPI_Button Class: API Overview and All Methods"
+sidebarTitle: "Overview"
+description: "Build touch-enabled UI buttons with TFT_eSPI_Button — a lightweight class for rendering, hit-testing, and tracking press states on TFT displays."
+---
+
+The `TFT_eSPI_Button` class gives you everything you need to build interactive touchscreen buttons on TFT displays. It handles button rendering with customisable outline, fill, and label colours, performs coordinate hit-testing against the button's bounding rectangle, and maintains a two-state press tracker so your loop code can detect the exact moment a button is pressed or released — without writing any debounce logic yourself.
+
+The class lives in the `Extensions` folder of the TFT_eSPI library. You do **not** need to include it separately: it is automatically pulled in when you write `#include <TFT_eSPI.h>`, so every TFT_eSPI sketch can use `TFT_eSPI_Button` out of the box. Touch coordinates are supplied by you — typically from `tft.getTouch()` backed by an XPT2046 controller — which keeps the button class decoupled from any specific touch hardware.
+
+The typical usage pattern is: declare one or more `TFT_eSPI_Button` instances (an array works well for multi-button UIs), call `initButton()` or `initButtonUL()` once in `setup()`, call `drawButton()` to render them, then in each `loop()` iteration read touch coordinates, pass them through `contains()` into `press()`, and check `justPressed()` or `justReleased()` to fire one-shot actions on state transitions.
+
+## Public methods
+
+| Method | Description |
+|--------|-------------|
+| `TFT_eSPI_Button()` | Default constructor; zeros all internal state ready for a call to `initButton()` or `initButtonUL()`. |
+| `initButton(gfx, x, y, w, h, outline, fill, textcolor, label, textsize)` | Initialise the button using a **centre** coordinate. |
+| `initButtonUL(gfx, x1, y1, w, h, outline, fill, textcolor, label, textsize)` | Initialise the button using an **upper-left** coordinate. |
+| `setLabelDatum(x_delta, y_delta, datum)` | Adjust the label's position and alignment datum relative to the button centre. |
+| `drawButton(inverted, long_name)` | Render the button on screen; swap colours when `inverted = true` for a visual press effect. |
+| `contains(x, y) → bool` | Return `true` when the point `(x, y)` falls inside the button's bounding rectangle. |
+| `press(bool p)` | Update the internal press state with the current touch reading. |
+| `isPressed() → bool` | Return `true` if the button is currently pressed. |
+| `justPressed() → bool` | Return `true` on the first call after the button transitions from released → pressed. |
+| `justReleased() → bool` | Return `true` on the first call after the button transitions from pressed → released. |
+
+## Quick-start example
+
+The snippet below creates a single labelled button and reacts to touch events:
+
+```cpp TFT_eSPI_Button quick-start
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI      tft = TFT_eSPI();  // TFT display instance
+TFT_eSPI_Button btn;             // Button instance — no arguments needed
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Centre the button at (120, 100), 100 px wide × 40 px tall
+  btn.initButton(&tft,
+                 120, 100,          // x centre, y centre
+                 100, 40,           // width, height
+                 TFT_WHITE,         // outline colour
+                 TFT_DARKGREEN,     // fill colour
+                 TFT_WHITE,         // label text colour
+                 "GO",              // label
+                 2);                // text size multiplier
+  btn.drawButton();
+}
+
+void loop() {
+  uint16_t tx, ty;
+
+  if (tft.getTouch(&tx, &ty)) {
+    btn.press(btn.contains(tx, ty));
+  } else {
+    btn.press(false);
+  }
+
+  if (btn.justPressed()) {
+    btn.drawButton(true);   // draw inverted (visual feedback)
+  }
+  if (btn.justReleased()) {
+    btn.drawButton(false);  // restore normal appearance
+  }
+}
+```
+
+<Note>
+  `TFT_eSPI_Button` does not call `getTouch()` itself — you supply the touch coordinates. This keeps the class decoupled from any particular touch controller.
+</Note>
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Init & Draw" icon="paintbrush" href="/api/tft-espi-button/init-draw">
+    Full parameter reference for `initButton()`, `initButtonUL()`, `setLabelDatum()`, and `drawButton()`.
+  </Card>
+  <Card title="Press State" icon="hand-pointer" href="/api/tft-espi-button/press-state">
+    How to use `contains()`, `press()`, `isPressed()`, `justPressed()`, and `justReleased()` for robust touch handling.
+  </Card>
+</CardGroup>

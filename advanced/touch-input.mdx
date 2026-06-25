@@ -1,0 +1,150 @@
+---
+title: "Resistive Touch Screen Input with the XPT2046 Controller"
+sidebarTitle: "Touch Input"
+description: "Read and calibrate resistive touch screens using the XPT2046 controller built into TFT_eSPI — no extra library required for SPI displays."
+---
+
+TFT_eSPI has built-in support for the **XPT2046** resistive touch screen controller that is integrated on most SPI-connected TFT modules. The touch controller shares the SPI bus with the display and uses a dedicated chip-select pin to arbitrate access. Because the support is compiled directly into the library, you get a complete touch API — raw ADC readings, pressure measurement, calibrated screen coordinates, and a 4-point calibration routine — without pulling in a third-party dependency.
+
+## Enabling Touch Support
+
+Touch functionality is activated at compile time by defining `TOUCH_CS` in your `User_Setup.h` file (or `platformio.ini`). Set it to the GPIO pin connected to the touch controller's chip-select line:
+
+```cpp title="User_Setup.h — enabling touch"
+#define TOUCH_CS 21    // GPIO pin wired to XPT2046 CS/T_CS
+```
+
+The SPI clock frequency used for touch communication defaults to 2.5 MHz. You can override it in `User_Setup.h` if your hardware requires a different rate:
+
+```cpp title="User_Setup.h — optional touch SPI frequency"
+#define SPI_TOUCH_FREQUENCY  2500000   // Default: 2.5 MHz
+```
+
+<Warning>
+  Touch functions are **not available** when using an 8-bit or 16-bit parallel interface, or when the RP2040 PIO interface is active. In those configurations the compiler emits an error if `TOUCH_CS` is defined. Use a third-party touch library such as `XPT2046_Touchscreen` with a separate SPI instance for parallel-interface displays.
+</Warning>
+
+## Touch API Reference
+
+All touch methods are member functions of `TFT_eSPI` and are available on your `tft` object whenever `TOUCH_CS` is defined.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getTouchRaw(uint16_t *x, uint16_t *y)` | `uint8_t` | Raw ADC values from the XPT2046, with no calibration applied |
+| `getTouchRawZ()` | `uint16_t` | Raw Z (pressure) value; returns `0` when the screen is not touched |
+| `getTouch(uint16_t *x, uint16_t *y, uint16_t threshold = 600)` | `uint8_t` | Calibrated screen pixel coordinates; returns `1` on a valid touch above `threshold` |
+| `calibrateTouch(uint16_t *data, uint32_t color_fg, uint32_t color_bg, uint8_t size)` | `void` | Interactive 4-point calibration routine; writes five `uint16_t` values to `data` |
+| `setTouch(uint16_t *data)` | `void` | Restores a previously saved calibration array to the touch engine |
+
+### Method Signatures
+
+```cpp title="Touch API signatures"
+uint8_t  getTouchRaw(uint16_t *x, uint16_t *y);
+uint16_t getTouchRawZ(void);
+uint8_t  getTouch(uint16_t *x, uint16_t *y, uint16_t threshold = 600);
+void     calibrateTouch(uint16_t *data, uint32_t color_fg,
+                        uint32_t color_bg, uint8_t size);
+void     setTouch(uint16_t *data);
+```
+
+## Basic Touch Reading Example
+
+The sketch below initialises the display and prints calibrated touch coordinates to both the screen and the Serial monitor whenever a touch is detected.
+
+```cpp title="Reading calibrated touch coordinates"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  Serial.begin(115200);
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  tft.drawString("Touch the screen", 10, 10, 2);
+}
+
+void loop() {
+  uint16_t x, y;
+
+  if (tft.getTouch(&x, &y)) {
+    // A valid touch was detected — x and y are calibrated screen coordinates
+    tft.fillCircle(x, y, 4, TFT_RED);
+    Serial.printf("Touch at (%u, %u)\n", x, y);
+  }
+}
+```
+
+<Tip>
+  The default pressure `threshold` for `getTouch()` is `600`. Lowering this value makes touch detection more sensitive; raising it requires a firmer press. Adjust it to match your panel's characteristics if touches are missed or falsely detected.
+</Tip>
+
+## Calibration and Saving to Non-Volatile Storage
+
+Raw ADC readings do not map linearly to screen pixels and can vary between hardware revisions. Running a one-time calibration routine and storing the result means the coordinate mapping is accurate on every subsequent boot.
+
+<Steps>
+  <Step title="Run the calibration routine">
+    Call `calibrateTouch()` to launch the interactive calibration UI. The library draws crosshairs at the four corners of the screen and prompts the user to tap each one. When all four points have been captured, the function writes five `uint16_t` calibration values into your array.
+
+    ```cpp title="Running calibrateTouch()"
+    uint16_t calData[5];
+
+    tft.fillScreen(TFT_BLACK);
+    tft.calibrateTouch(calData, TFT_WHITE, TFT_BLACK, 15);
+    ```
+  </Step>
+
+  <Step title="Persist the calibration data">
+    Save the five values to non-volatile storage so calibration survives a power cycle. On ESP32, the Preferences library is the easiest option:
+
+    ```cpp title="Saving calibration to NVS (ESP32)"
+    #include <Preferences.h>
+    Preferences prefs;
+
+    prefs.begin("touch", false);
+    prefs.putBytes("cal", calData, sizeof(calData));
+    prefs.end();
+    ```
+  </Step>
+
+  <Step title="Restore calibration on boot">
+    On subsequent boots, load the saved values from NVS and hand them to `setTouch()`. If no calibration data is found, fall back to running `calibrateTouch()` again.
+
+    ```cpp title="Loading and applying saved calibration"
+    #include <Preferences.h>
+    Preferences prefs;
+    uint16_t calData[5];
+
+    prefs.begin("touch", true);
+    if (prefs.getBytesLength("cal") == sizeof(calData)) {
+      prefs.getBytes("cal", calData, sizeof(calData));
+      tft.setTouch(calData);   // Apply stored calibration
+    } else {
+      // No calibration data found — run calibrateTouch() again
+      tft.calibrateTouch(calData, TFT_WHITE, TFT_BLACK, 15);
+    }
+    prefs.end();
+    ```
+  </Step>
+</Steps>
+
+## Reading Raw Pressure
+
+`getTouchRawZ()` returns the raw Z (pressure) value from the XPT2046. It is useful for detecting touch intensity independently of position, or for implementing your own debounce logic before calling `getTouchRaw()`:
+
+```cpp title="Pressure-gated raw touch reading"
+uint16_t pressure = tft.getTouchRawZ();
+
+if (pressure > 350) {
+  uint16_t rawX, rawY;
+  tft.getTouchRaw(&rawX, &rawY);
+  Serial.printf("Raw: x=%u  y=%u  z=%u\n", rawX, rawY, pressure);
+}
+```
+
+A return value of `0` from `getTouchRawZ()` means the screen is not being touched. Higher values indicate greater pressure.
+
+## Alternative Libraries for Parallel Interfaces
+
+When you drive a display over an 8-bit or 16-bit parallel bus — or via the RP2040 PIO interface — the XPT2046 touch support in TFT_eSPI is disabled at compile time. In those cases, wire the touch controller to a separate SPI bus and use an independent library such as [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen) by Paul Stoffregen. It communicates over its own `SPIClass` instance and does not conflict with the display bus.

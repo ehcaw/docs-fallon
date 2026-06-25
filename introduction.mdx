@@ -1,0 +1,72 @@
+---
+title: "TFT_eSPI: Arduino TFT Graphics Library for 32-bit MCUs"
+sidebarTitle: "Introduction"
+description: "TFT_eSPI is a high-performance Arduino and PlatformIO TFT graphics library optimized for ESP32, ESP8266, RP2040, and STM32 microcontrollers."
+---
+
+TFT_eSPI is a feature-rich, Arduino IDE and PlatformIO compatible graphics and fonts library designed specifically for 32-bit processors. Targeting platforms such as the Raspberry Pi Pico (RP2040), STM32, ESP8266, and the ESP32 family, it delivers rendering performance that is typically **3 to 10 times faster** than generic alternatives by using processor-specific optimizations and direct register manipulation instead of the slower standard Arduino SPI interface calls. The library supports a wide range of TFT display controllers over SPI and parallel interfaces, includes built-in XPT2046 touch support, hardware-accelerated DMA transfers, and an off-screen Sprite system — making it the go-to choice for embedded GUI development on resource-constrained 32-bit MCUs.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Install TFT_eSPI via Arduino Library Manager or PlatformIO's lib_deps.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/getting-started/configuration">
+    Edit User_Setup.h to match your display controller and pin wiring.
+  </Card>
+  <Card title="First Sketch" icon="play" href="/getting-started/first-sketch">
+    Write and upload your first Hello World sketch to a TFT display.
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/tft-espi/overview">
+    Browse the full TFT_eSPI class methods and display primitives.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+- **3–10× faster rendering** than generic Arduino TFT libraries thanks to processor-specific optimizations for ESP32, ESP8266, RP2040, and STM32.
+- **Broad MCU support** — optimized drivers for RP2040, ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP8266, and STM32Fxxx families.
+- **Multiple interface types** — 4-wire SPI, 8-bit parallel, and 16-bit parallel (RP2040 only), with hardware DMA on supported platforms.
+- **Wide display controller support** — ILI9341, ILI9342, ILI9481, ILI9486, ILI9488, ST7735, ST7789, ST7796, HX8357B/C/D, GC9A01, SSD1351, SSD1963, and more.
+- **Sprite engine** — off-screen rendering buffers (`TFT_eSprite`) for flicker-free animation and partial-screen updates.
+- **Built-in touch support** — native XPT2046 SPI touch controller integration; third-party libraries available for parallel interface displays.
+- **Flexible font system** — built-in Adafruit GFX compatible fonts plus smooth anti-aliased TrueType-style fonts via the VLW font format.
+- **PlatformIO per-project configuration** — define all pin and driver settings directly in `platformio.ini` without touching shared library files.
+- **Clean sketch examples** — configuration lives in the library, so every bundled example runs on your hardware without modification once configured.
+
+## Supported Processors and Interface Capabilities
+
+The table below summarises which interface types and DMA modes are available on each supported processor family.
+
+| Processor    | 4-wire SPI | 8-bit Parallel | 16-bit Parallel | DMA Support    |
+|--------------|:----------:|:--------------:|:---------------:|----------------|
+| RP2040       | ✅         | ✅             | ✅              | Yes (all)      |
+| ESP32        | ✅         | ✅             | ❌              | Yes (SPI only) |
+| ESP32-C3     | ✅         | ❌             | ❌              | No             |
+| ESP32-S2     | ✅         | ❌             | ❌              | No             |
+| ESP32-S3     | ✅         | ✅             | ❌              | Yes (SPI only) |
+| ESP8266      | ✅         | ❌             | ❌              | No             |
+| STM32Fxxx    | ✅         | ✅             | ❌              | Yes (SPI only) |
+| Other 32-bit | ✅         | ❌             | ❌              | No             |
+
+<Note>
+  4-wire SPI requires the display to expose a **Data/Command** control line (sometimes labelled `DC`, `RS`, or `A0`) in addition to the standard SPI signals. 8-bit parallel is not available on ESP8266 due to insufficient GPIO count.
+</Note>
+
+## Supported Display Controllers
+
+TFT_eSPI ships with drivers for the following controller ICs. The **ILI9341** and **ST7796** SPI displays are recommended as the best starting points.
+
+| Manufacturer    | Controllers                                                        |
+|-----------------|--------------------------------------------------------------------|
+| GalaxyCore      | GC9A01                                                             |
+| Ilitek (ILI)    | ILI9163, ILI9225, ILI9341, ILI9342, ILI9481, ILI9486, ILI9488    |
+| Himax           | HX8357B, HX8357C, HX8357D                                         |
+| RenesasSP       | R61581                                                             |
+| Raydium         | RM68120, RM68140                                                   |
+| Samsung         | S6D02A1                                                            |
+| Solomon Systech | SSD1351, SSD1963                                                   |
+| Sitronix        | ST7735, ST7789, ST7796                                             |
+
+<Tip>
+  For Raspberry Pi HAT displays based on the ILI9486 driver, use the Waveshare design only — it relies on a specific 16-bit serial interface built around 74HC04, 74HC4040, and 74HC4094 logic chips. Not all RPi displays are compatible.
+</Tip>

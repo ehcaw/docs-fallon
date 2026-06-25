@@ -1,0 +1,95 @@
+---
+title: "Install TFT_eSPI in Arduino IDE or PlatformIO"
+sidebarTitle: "Installation"
+description: "Install the TFT_eSPI library in Arduino IDE via Library Manager or in PlatformIO by adding it to your platformio.ini lib_deps entry."
+---
+
+TFT_eSPI can be installed in two ways depending on your development environment. Arduino IDE users can install it directly from the built-in Library Manager with a single search-and-click workflow. PlatformIO users declare the dependency in `platformio.ini` and the toolchain fetches it automatically during build. Both methods get you the same library, but PlatformIO offers the additional advantage of keeping per-project configuration files separate from your global library folder.
+
+<Warning>
+  Updating TFT_eSPI through either the Arduino Library Manager or PlatformIO will **overwrite your local changes** to `User_Setup.h` and any custom setup files in the library folder. Back up your configuration before upgrading, or use the PlatformIO per-project `build_flags` approach described in the [Configuration guide](/getting-started/configuration) to keep settings version-safe.
+</Warning>
+
+## Arduino IDE
+
+<Steps>
+  <Step title="Open the Library Manager">
+    In the Arduino IDE menu, navigate to **Sketch → Include Library → Manage Libraries…** (or press `Ctrl+Shift+I` on Windows/Linux, `⌘+Shift+I` on macOS) to open the Library Manager panel.
+  </Step>
+  <Step title="Search for TFT_eSPI">
+    Type `TFT_eSPI` in the search box. The library by **Bodmer** will appear at the top of the results. Confirm the author name matches to avoid installing an unrelated package.
+  </Step>
+  <Step title="Install the library">
+    Click the **Install** button next to the latest version. The IDE will download and place the library in your Arduino libraries folder:
+
+    - **Windows:** `C:\Users\<username>\Documents\Arduino\libraries\TFT_eSPI\`
+    - **macOS:** `~/Documents/Arduino/libraries/TFT_eSPI/`
+    - **Linux:** `~/Arduino/libraries/TFT_eSPI/`
+  </Step>
+  <Step title="Configure for your hardware">
+    Before uploading any sketch, open `User_Setup.h` inside the installed library folder and configure it for your specific display and pin wiring. See the [Configuration guide](/getting-started/configuration) for full details.
+  </Step>
+</Steps>
+
+## PlatformIO
+
+<Steps>
+  <Step title="Open or create platformio.ini">
+    Every PlatformIO project contains a `platformio.ini` file at the project root. Open it in your editor — if starting a new project, PlatformIO IDE will have generated one for you.
+  </Step>
+  <Step title="Add TFT_eSPI to lib_deps">
+    Under your `[env:...]` section, add TFT_eSPI to the `lib_deps` key. PlatformIO will resolve and download the library from its registry on the next build.
+  </Step>
+  <Step title="Add display configuration via build_flags">
+    PlatformIO lets you define TFT_eSPI settings on a per-project basis using `build_flags` instead of editing the shared `User_Setup.h`. This keeps your configuration inside your project repository and safe from library upgrades.
+  </Step>
+  <Step title="Build the project">
+    Run **Build** (the checkmark button) or execute `pio run` in the terminal. PlatformIO fetches TFT_eSPI and compiles your project with the settings defined in `platformio.ini`.
+  </Step>
+</Steps>
+
+<CodeGroup>
+```ini platformio.ini (lib_deps + build_flags)
+[env:esp32dev]
+platform  = espressif32
+board     = esp32dev
+framework = arduino
+
+lib_deps =
+    bodmer/TFT_eSPI
+
+; Per-project display configuration — overrides User_Setup.h
+build_flags =
+    -D USER_SETUP_LOADED=1
+    -D ILI9341_DRIVER=1
+    -D TFT_MOSI=23
+    -D TFT_SCLK=18
+    -D TFT_CS=5
+    -D TFT_DC=2
+    -D TFT_RST=4
+    -D TFT_WIDTH=240
+    -D TFT_HEIGHT=320
+    -D SPI_FREQUENCY=27000000
+```
+
+```cpp Arduino IDE sketch
+// Arduino IDE: install TFT_eSPI via Library Manager,
+// then configure User_Setup.h in the library folder.
+// Your sketch only needs this include:
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+}
+
+void loop() {}
+```
+</CodeGroup>
+
+<Note>
+  When using the `build_flags` approach in PlatformIO you must set `-D USER_SETUP_LOADED=1` first. This preprocessor flag tells TFT_eSPI to skip loading `User_Setup.h` entirely and use only the definitions supplied by your build flags. Without it the library will still read `User_Setup.h` and your flags may conflict.
+</Note>

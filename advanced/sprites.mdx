@@ -1,0 +1,193 @@
+---
+title: "Off-Screen Rendering with TFT_eSprite Frame Buffers"
+sidebarTitle: "Sprites"
+description: "Use TFT_eSprite to draw graphics into an off-screen RAM buffer and push the finished frame to the display for flicker-free animation."
+---
+
+Sprites are off-screen pixel buffers that let you compose a complete frame in RAM before sending it to the display in a single burst. Instead of drawing shapes one at a time directly onto the screen — which produces visible tearing and flicker — you render everything into the sprite first, then call `pushSprite()` to blit the finished image to the screen. This pattern is the foundation of smooth animation and responsive UIs on microcontrollers.
+
+## The TFT_eSprite Class
+
+`TFT_eSprite` is a **friend class** of `TFT_eSPI` that inherits all of its drawing methods. It overrides the low-level pixel-write routines so that every drawing call targets the sprite's internal RAM buffer rather than the physical display. Once you are happy with the contents of the sprite, a single method call transfers it to the screen.
+
+<Note>
+  Because `TFT_eSprite` inherits from `TFT_eSPI`, every drawing function you know from the main display object — `fillRect()`, `drawString()`, `drawCircle()`, anti-aliased helpers, smooth fonts — works identically on a sprite. There is no separate API to learn.
+</Note>
+
+### Creating a Sprite
+
+The constructor takes a **pointer** to your existing `TFT_eSPI` instance. After construction you must call `createSprite()` to allocate the pixel buffer in RAM.
+
+```cpp title="Declaring a sprite object"
+#include <TFT_eSPI.h>
+
+TFT_eSPI    tft = TFT_eSPI();          // Main display object
+TFT_eSprite spr = TFT_eSprite(&tft);   // Sprite bound to tft
+```
+
+```cpp title="Allocating the sprite in setup()"
+void setup() {
+  tft.init();
+  tft.fillScreen(TFT_BLACK);
+
+  // Allocate a 120 x 80 pixel sprite (16-bit colour by default)
+  spr.createSprite(120, 80);
+}
+```
+
+`createSprite(width, height)` returns a `void*` pointer to the raw pixel buffer, which you can cast to `uint16_t*` if you need direct memory access. It returns `nullptr` if allocation fails — always check the return value on memory-constrained devices.
+
+When you no longer need the sprite, free its RAM with `deleteSprite()`:
+
+```cpp title="Freeing sprite memory"
+spr.deleteSprite();
+```
+
+## Pushing a Sprite to the Screen
+
+`pushSprite(x, y)` transfers the sprite's pixel buffer to the display at the given screen coordinates. Coordinates may be negative — pixels outside the screen boundary are clipped automatically.
+
+```cpp title="Basic pushSprite call"
+// Push sprite to position (10, 20) on screen
+spr.pushSprite(10, 20);
+```
+
+To treat one colour as transparent — so that those pixels do not overwrite the background — pass the transparent colour as a third argument:
+
+```cpp title="pushSprite with transparency"
+// Pixels matching TFT_BLACK will not overwrite the background
+spr.pushSprite(10, 20, TFT_BLACK);
+```
+
+## Colour Depth Options
+
+Sprites support four colour depths. Choosing a lower depth trades colour range for significantly less RAM usage — a critical consideration on memory-constrained devices such as the ESP8266.
+
+| Depth  | Bits per pixel | Colours           | RAM for 128×128 |
+|--------|---------------|-------------------|-----------------|
+| 1 bpp  | 1             | 2 (monochrome)    | 2 KB            |
+| 4 bpp  | 4             | 16 (palette)      | 8 KB            |
+| 8 bpp  | 8             | 256 (RGB332)      | 16 KB           |
+| 16 bpp | 16            | 65,536 (RGB565)   | 32 KB           |
+
+Set the colour depth **before** calling `createSprite()`:
+
+```cpp title="Setting 8-bit colour depth"
+spr.setColorDepth(8);           // 8-bit colour
+spr.createSprite(128, 128);
+```
+
+You can also change the depth of an existing sprite. Doing so clears the sprite to black and returns a new buffer pointer:
+
+```cpp title="Switching to 4-bit palette mode"
+spr.setColorDepth(4);           // Switch to 4-bit palette mode
+```
+
+### 4-Bit Palette Sprites
+
+When using 4-bit colour depth, each pixel stores an index (0–15) into a 16-entry colour palette. A default palette is created automatically when you call `createSprite()` in 4-bit mode. Use `setPaletteColor()` to customise individual entries:
+
+```cpp title="Customising the 4-bit palette"
+spr.setColorDepth(4);
+spr.createSprite(64, 64);
+
+// Map palette entry 0 to red, entry 1 to blue
+spr.setPaletteColor(0, TFT_RED);
+spr.setPaletteColor(1, TFT_BLUE);
+
+// Draw using palette indices
+spr.fillSprite(0);               // Fill with palette colour 0 (red)
+spr.fillRect(10, 10, 20, 20, 1); // Draw rect with palette colour 1 (blue)
+```
+
+You can also supply an entire palette array at once via `createPalette()`:
+
+```cpp title="Loading a full palette array"
+uint16_t myPalette[16] = { TFT_BLACK, TFT_WHITE, TFT_RED, TFT_GREEN, /* … */ };
+spr.createPalette(myPalette, 16);
+```
+
+## Complete Animation Example
+
+The sketch below creates a bouncing ball using a sprite to eliminate flicker. The sprite is filled with the background colour at the start of each frame, then the ball is drawn before `pushSprite()` sends it to the screen.
+
+```cpp title="Bouncing ball animation with a sprite"
+#include <TFT_eSPI.h>
+
+TFT_eSPI    tft = TFT_eSPI();
+TFT_eSprite spr = TFT_eSprite(&tft);
+
+#define SPR_W 80
+#define SPR_H 80
+
+int ballX = 0, ballY = 0;
+int dx = 2,    dy = 2;
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_NAVY);
+
+  spr.createSprite(SPR_W, SPR_H);
+}
+
+void loop() {
+  // --- Draw into the sprite ---
+  spr.fillSprite(TFT_NAVY);                    // Clear to background colour
+  spr.fillCircle(SPR_W / 2, SPR_H / 2,
+                 20, TFT_YELLOW);              // Draw ball
+  spr.drawCircle(SPR_W / 2, SPR_H / 2,
+                 20, TFT_WHITE);              // Outline
+
+  // --- Push sprite to screen ---
+  spr.pushSprite(ballX, ballY);
+
+  // --- Update position ---
+  ballX += dx;
+  ballY += dy;
+
+  if (ballX < 0 || ballX > tft.width()  - SPR_W) dx = -dx;
+  if (ballY < 0 || ballY > tft.height() - SPR_H) dy = -dy;
+
+  delay(10);
+}
+```
+
+## Using PSRAM on ESP32
+
+Large sprites — such as full-screen frame buffers — may exceed the ESP32's internal SRAM. When PSRAM is present, `TFT_eSprite` can allocate the pixel buffer there automatically. Enable PSRAM use via `setAttribute()` before calling `createSprite()`:
+
+```cpp title="Enabling PSRAM allocation for a large sprite"
+tft.setAttribute(PSRAM_ENABLE, true);  // Enable PSRAM allocation (id = 3)
+
+spr.createSprite(320, 240);            // ~150 KB — only feasible with PSRAM
+```
+
+The library calls `psramFound()` at allocation time. If PSRAM is unavailable the allocation falls back to internal RAM silently.
+
+<Note>
+  PSRAM allocation is **disabled** when `tft.DMA_Enabled` is `true`, because PSRAM is not DMA-capable on ESP32. You must choose one or the other: use DMA without PSRAM, or use PSRAM without DMA.
+</Note>
+
+## Sprite Lifecycle
+
+<Steps>
+  <Step title="Instantiate">
+    Declare a `TFT_eSprite` object, passing a pointer to your `TFT_eSPI` instance to the constructor.
+  </Step>
+  <Step title="Configure colour depth (optional)">
+    Call `spr.setColorDepth(bpp)` before allocating. The default is 16 bpp (RGB565). Lower depths save RAM at the cost of colour range.
+  </Step>
+  <Step title="Allocate">
+    Call `spr.createSprite(width, height)` to reserve RAM for the pixel buffer. Check the return value is not `nullptr` before drawing.
+  </Step>
+  <Step title="Draw">
+    Use any `TFT_eSPI` drawing method on the sprite object — `fillSprite()`, `drawString()`, `fillRect()`, `fillCircle()`, and so on. All calls target the RAM buffer.
+  </Step>
+  <Step title="Push">
+    Call `spr.pushSprite(x, y)` — or `spr.pushSprite(x, y, transparentColor)` — to transfer the completed frame to the TFT display.
+  </Step>
+  <Step title="Delete">
+    When the sprite is no longer needed, call `spr.deleteSprite()` to release the RAM buffer back to the heap.
+  </Step>
+</Steps>

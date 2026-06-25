@@ -1,0 +1,189 @@
+---
+title: "Your First TFT_eSPI Sketch: Hello World Example"
+sidebarTitle: "First Sketch"
+description: "Write and upload your first TFT_eSPI sketch: initialize the display, set rotation, fill the screen, and print Hello World in a few lines of C++."
+---
+
+With TFT_eSPI installed and your `User_Setup.h` configured for your hardware, you are ready to write and upload your first sketch. The workflow follows a familiar Arduino pattern — include the library, create a display object, initialize the hardware in `setup()`, and render graphics in `loop()`. Because TFT_eSPI's configuration lives inside the library rather than the sketch, your sketch stays lean: there are no pin numbers or driver constants cluttering the top of the file.
+
+<Note>
+  You **must** configure `User_Setup.h` (or `platformio.ini` build flags) for your specific display and pin wiring before any sketch will work correctly. Uploading a sketch without configuring the library first will result in a blank screen. See the [Configuration guide](/getting-started/configuration) for full details.
+</Note>
+
+## Hello World Step by Step
+
+<Steps>
+  <Step title="Include the library">
+    Add the TFT_eSPI header at the top of your sketch. The `SPI.h` library is pulled in automatically on most platforms, but including it explicitly avoids IDE-specific quirks.
+
+    ```cpp
+    #include <TFT_eSPI.h>
+    #include <SPI.h>
+    ```
+
+    The `#include <TFT_eSPI.h>` directive brings in the entire TFT_eSPI class along with all font data you have enabled in `User_Setup.h`.
+  </Step>
+
+  <Step title="Create a TFT_eSPI instance">
+    Declare a global `TFT_eSPI` object. This object is your interface to every drawing primitive in the library.
+
+    ```cpp
+    TFT_eSPI tft = TFT_eSPI();
+    ```
+
+    The constructor reads pin and driver settings from the `User_Setup.h` you configured earlier — no arguments are needed here.
+  </Step>
+
+  <Step title="Initialize the display in setup()">
+    Call `tft.init()` to send the initialization sequence to the display controller, then set the screen orientation with `tft.setRotation()`.
+
+    ```cpp
+    void setup() {
+      tft.init();           // Send power-on and controller init commands
+      tft.setRotation(1);   // 0=portrait, 1=landscape, 2=portrait inverted, 3=landscape inverted
+    }
+    ```
+
+    `setRotation()` accepts values 0–3, stepping through 90° increments clockwise. Value `1` gives landscape orientation on most displays.
+  </Step>
+
+  <Step title="Draw text in the sketch body">
+    Use the cursor-based `print` / `println` API (inherited from Arduino's `Print` class) or the coordinate-based `drawString` API to render text.
+
+    ```cpp
+    void setup() {
+      tft.init();
+      tft.setRotation(1);
+      tft.fillScreen(TFT_BLACK);   // Clear screen with a solid black fill
+      tft.setCursor(0, 0);         // Move text cursor to top-left corner (x=0, y=0)
+      tft.setTextColor(TFT_WHITE); // White characters, transparent background
+      tft.setTextSize(2);          // Scale built-in font by 2× (16px tall)
+      tft.setTextFont(2);          // Select font 2 (16px smooth font)
+      tft.println("Hello World!"); // Print text and advance cursor to next line
+    }
+
+    void loop() {
+      // Display is static — nothing to do in loop
+    }
+    ```
+  </Step>
+</Steps>
+
+## Complete Hello World Sketch
+
+Here is the full, upload-ready Hello World sketch combining all the steps above:
+
+```cpp
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+// Create the display object — pin and driver settings come from User_Setup.h
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  // Initialize the display controller
+  tft.init();
+
+  // Set orientation: 1 = landscape (90° clockwise from portrait)
+  tft.setRotation(1);
+
+  // Fill the entire screen with solid black
+  tft.fillScreen(TFT_BLACK);
+
+  // Position the text cursor at pixel (0, 0) — top-left corner
+  tft.setCursor(0, 0);
+
+  // Set foreground colour to white (background is transparent)
+  tft.setTextColor(TFT_WHITE);
+
+  // Scale the font to 2× the base size
+  tft.setTextSize(2);
+
+  // Select built-in font 2 (16 px smooth font)
+  tft.setTextFont(2);
+
+  // Print the message and move the cursor to the next line
+  tft.println("Hello World!");
+}
+
+void loop() {
+  // Nothing to do — the message stays on screen
+}
+```
+
+### What each method does
+
+| Method | Description |
+|--------|-------------|
+| [`tft.init()`](/api/tft-espi/overview) | Sends the controller initialization sequence and powers on the display. Equivalent to `tft.begin()` on some driver builds. |
+| [`tft.setRotation(r)`](/api/tft-espi/overview) | Rotates the display coordinate system. `0` = portrait, `1` = landscape, `2` = portrait flipped, `3` = landscape flipped. |
+| [`tft.fillScreen(color)`](/api/tft-espi/overview) | Fills every pixel with the specified 16-bit RGB565 colour constant. Use built-in constants like `TFT_BLACK`, `TFT_WHITE`, `TFT_RED`, `TFT_GREEN`, `TFT_BLUE`. |
+| [`tft.setCursor(x, y)`](/api/tft-espi/overview) | Sets the pixel position of the next `print()` / `println()` call. `(0, 0)` is the top-left corner. |
+| [`tft.setTextColor(fg)`](/api/tft-espi/overview) | Sets the foreground text colour. A second argument sets the background fill colour: `setTextColor(TFT_WHITE, TFT_BLACK)`. |
+| [`tft.setTextSize(s)`](/api/tft-espi/overview) | Scales the active font by integer multiplier `s`. `1` = no scaling, `2` = double size, etc. |
+| [`tft.setTextFont(f)`](/api/tft-espi/overview) | Selects the active built-in font by number. Font 1 is the tiny 8px Adafruit GFX font; font 2 is a smooth 16px font. |
+| [`tft.println(text)`](/api/tft-espi/overview) | Prints a string at the current cursor position and moves the cursor to the start of the next line. Inherited from Arduino's `Print` class. |
+
+## Drawing Shapes and Positioned Text
+
+The following example demonstrates coordinate-based text with `drawString`, a filled rectangle, and a circle — the building blocks of most display UIs:
+
+```cpp
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);           // Landscape
+  tft.fillScreen(TFT_NAVY);     // Dark-blue background
+
+  // ── Filled rectangle (x, y, width, height, colour) ─────────────────
+  // Draws a white banner bar across the top of the screen
+  tft.fillRect(0, 0, 320, 40, TFT_WHITE);
+
+  // ── drawString(string, x, y, font) ──────────────────────────────────
+  // Renders text at an absolute pixel position without moving a cursor
+  tft.setTextColor(TFT_NAVY);
+  tft.drawString("TFT_eSPI Demo", 10, 8, 4);   // Font 4 = 26px
+
+  // ── Circle (centre_x, centre_y, radius, colour) ─────────────────────
+  // Hollow circle
+  tft.drawCircle(160, 120, 50, TFT_YELLOW);
+
+  // Filled circle inside the hollow one
+  tft.fillCircle(160, 120, 30, TFT_ORANGE);
+
+  // ── More drawString calls in different fonts ─────────────────────────
+  tft.setTextColor(TFT_WHITE);
+  tft.drawString("Hello World!", 90, 190, 2);   // Font 2 = 16px
+}
+
+void loop() {}
+```
+
+<Tip>
+  `drawString(text, x, y, font)` is generally preferred over the cursor-based `println()` when you need precise pixel placement, since it does not depend on the current cursor position and does not modify it after rendering.
+</Tip>
+
+## Built-in Colour Constants
+
+TFT_eSPI defines a set of 16-bit RGB565 colour constants you can use anywhere a colour argument is expected:
+
+| Constant | Colour |
+|----------|--------|
+| `TFT_BLACK` | Black |
+| `TFT_WHITE` | White |
+| `TFT_RED` | Red |
+| `TFT_GREEN` | Green |
+| `TFT_BLUE` | Blue |
+| `TFT_YELLOW` | Yellow |
+| `TFT_ORANGE` | Orange |
+| `TFT_CYAN` | Cyan |
+| `TFT_MAGENTA` | Magenta |
+| `TFT_NAVY` | Dark blue |
+| `TFT_DARKGREEN` | Dark green |
+| `TFT_MAROON` | Dark red |
+
+You can also construct any custom RGB565 colour at runtime using the `tft.color565(r, g, b)` method, which converts 8-bit red, green, and blue component values into the packed 16-bit format the display expects.

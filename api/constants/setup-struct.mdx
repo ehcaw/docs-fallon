@@ -1,0 +1,285 @@
+---
+title: "TFT_eSPI setup_t Struct and Configuration Constants"
+sidebarTitle: "setup_t Struct"
+description: "Full field reference for the TFT_eSPI setup_t diagnostics struct, getSetup() usage, key header constants, and the getColorCallback typedef."
+---
+
+TFT_eSPI is configured at compile time through a `User_Setup.h` file, but you can read those settings back at **runtime** — without any impact on code size unless you actually call the retrieval function — by using `getSetup()`. This populates a `setup_t` struct with every configured parameter: library version, display driver code, pin assignments, SPI frequencies, and more. The primary use-case is diagnostics: print the struct fields over Serial to confirm that the build-time configuration matches your hardware without having to dig through header files or guess pin numbers from board silkscreen labels.
+
+## Header constants
+
+These constants are defined in `TFT_eSPI.h` and are always available after `#include <TFT_eSPI.h>`.
+
+| Constant | Value | Description |
+|---|---|---|
+| `TFT_ESPI_VERSION` | `"2.5.43"` | Library version string. |
+| `TFT_ESPI_FEATURES` | `1` | Bit-level feature flags. Bit 0 set = viewport capability enabled. |
+| `TAB_COLOUR` | `0` | Default ST7735 tab colour. Override in `User_Setup.h` if your module uses a coloured tab. |
+| `SPI_FREQUENCY` | `20000000` | Default TFT write SPI clock (20 MHz). |
+| `SPI_READ_FREQUENCY` | `10000000` | Default TFT read SPI clock (10 MHz). |
+| `SPI_TOUCH_FREQUENCY` | `2500000` | Default XPT2046 touch controller SPI clock (2.5 MHz). |
+
+<Note>
+  `SPI_FREQUENCY`, `SPI_READ_FREQUENCY`, and `SPI_TOUCH_FREQUENCY` are default fallbacks. If you define them in your own `User_Setup.h`, your values take precedence at compile time.
+</Note>
+
+---
+
+## `getSetup()`
+
+Populates a caller-supplied `setup_t` struct with the current compile-time configuration.
+
+```cpp
+void TFT_eSPI::getSetup(setup_t &tft_settings);
+```
+
+Pass a `setup_t` instance by reference and all fields are filled immediately:
+
+```cpp getSetup basic usage
+setup_t cfg;
+tft.getSetup(cfg);
+
+Serial.println(cfg.version);          // e.g. "2.5.43"
+Serial.println(cfg.tft_driver, HEX);  // e.g. 9341 for ILI9341
+Serial.println(cfg.tft_width);        // e.g. 240
+Serial.println(cfg.tft_height);       // e.g. 320
+```
+
+Calling `getSetup()` has **zero impact on code size** unless you actually use it — the compiler dead-strips the function when it is unreferenced.
+
+---
+
+## `setup_t` struct fields
+
+```cpp setup_t struct definition
+typedef struct {
+  String   version;       // TFT_ESPI_VERSION string
+  String   setup_info;    // Optional reference name from user setup
+  uint32_t setup_id;      // Optional ID from user setup
+
+  int32_t  esp;           // Processor code
+  uint8_t  trans;         // SPI transaction support flag
+  uint8_t  serial;        // 1 = serial (SPI), 0 = parallel
+  uint8_t  port;          // SPI port number
+  uint8_t  overlap;       // ESP8266 SPI overlap mode flag
+  uint8_t  interface;     // Interface type code
+
+  uint16_t tft_driver;    // Display driver ID in hex (e.g. 0x9341 = ILI9341)
+  uint16_t tft_width;     // Native width  at rotation 0, in pixels
+  uint16_t tft_height;    // Native height at rotation 0, in pixels
+
+  // Display offsets for each of the 4 rotations
+  uint8_t r0_x_offset;  uint8_t r0_y_offset;
+  uint8_t r1_x_offset;  uint8_t r1_y_offset;
+  uint8_t r2_x_offset;  uint8_t r2_y_offset;
+  uint8_t r3_x_offset;  uint8_t r3_y_offset;
+
+  // SPI pins
+  int8_t pin_tft_mosi;
+  int8_t pin_tft_miso;
+  int8_t pin_tft_clk;
+  int8_t pin_tft_cs;
+
+  // Control pins
+  int8_t pin_tft_dc;
+  int8_t pin_tft_rd;
+  int8_t pin_tft_wr;
+  int8_t pin_tft_rst;
+
+  // Parallel port data pins (D0–D7)
+  int8_t pin_tft_d0;  int8_t pin_tft_d1;
+  int8_t pin_tft_d2;  int8_t pin_tft_d3;
+  int8_t pin_tft_d4;  int8_t pin_tft_d5;
+  int8_t pin_tft_d6;  int8_t pin_tft_d7;
+
+  // Backlight
+  int8_t pin_tft_led;
+  int8_t pin_tft_led_on;   // Logic level that turns the backlight ON
+
+  // Touch controller
+  int8_t pin_tch_cs;
+
+  // SPI frequencies
+  int16_t tft_spi_freq;    // TFT write SPI frequency
+  int16_t tft_rd_freq;     // TFT read  SPI frequency
+  int16_t tch_spi_freq;    // Touch controller SPI frequency
+} setup_t;
+```
+
+### Field reference
+
+<Expandable title="Identity and processor fields">
+  <ResponseField name="version" type="String">
+    The library version string, always equal to `TFT_ESPI_VERSION` (e.g. `"2.5.43"`).
+  </ResponseField>
+  <ResponseField name="setup_info" type="String">
+    An optional human-readable name for the user setup file, available for you to set in `User_Setup.h`.
+  </ResponseField>
+  <ResponseField name="setup_id" type="uint32_t">
+    An optional numeric ID for the user setup, available for programmatic setup identification at runtime. Use `verifySetupID()` to check it matches an expected value.
+  </ResponseField>
+  <ResponseField name="esp" type="int32_t">
+    Numeric processor code identifying the target MCU (ESP8266, ESP32, RP2040, STM32, and so on).
+  </ResponseField>
+  <ResponseField name="trans" type="uint8_t">
+    `1` if the SPI bus supports transactions (safe multi-device sharing); `0` otherwise.
+  </ResponseField>
+  <ResponseField name="serial" type="uint8_t">
+    `1` for serial (SPI) interface; `0` for parallel interface.
+  </ResponseField>
+  <ResponseField name="port" type="uint8_t">
+    SPI peripheral port number (VSPI, HSPI, etc.). Not present when `GENERIC_PROCESSOR` is defined.
+  </ResponseField>
+  <ResponseField name="overlap" type="uint8_t">
+    ESP8266 only. `1` if SPI overlap mode (sharing flash SPI pins) is active.
+  </ResponseField>
+  <ResponseField name="interface" type="uint8_t">
+    Encoded interface type (SPI, parallel 8-bit, parallel 16-bit, and so on).
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Display geometry fields">
+  <ResponseField name="tft_driver" type="uint16_t">
+    Display driver chip identifier in hexadecimal — e.g. `0x9341` for ILI9341, `0x7789` for ST7789. Print with `Serial.println(cfg.tft_driver, HEX)` for a readable output.
+  </ResponseField>
+  <ResponseField name="tft_width" type="uint16_t">
+    Native display width in pixels at rotation 0.
+  </ResponseField>
+  <ResponseField name="tft_height" type="uint16_t">
+    Native display height in pixels at rotation 0.
+  </ResponseField>
+  <ResponseField name="r0_x_offset .. r3_y_offset" type="uint8_t">
+    Per-rotation X and Y viewport offsets. Some display modules have a physical pixel array larger than the visible area; these offsets compensate for that. One pair exists for each of the four rotation values (0–3).
+  </ResponseField>
+</Expandable>
+
+<Expandable title="SPI pin fields">
+  <ResponseField name="pin_tft_mosi" type="int8_t">
+    GPIO pin number for SPI MOSI (Master Out Slave In). `-1` if not used.
+  </ResponseField>
+  <ResponseField name="pin_tft_miso" type="int8_t">
+    GPIO pin number for SPI MISO (Master In Slave Out). `-1` if not used or if half-duplex SDA mode is active.
+  </ResponseField>
+  <ResponseField name="pin_tft_clk" type="int8_t">
+    GPIO pin number for the SPI clock line.
+  </ResponseField>
+  <ResponseField name="pin_tft_cs" type="int8_t">
+    GPIO pin number for TFT chip select. `-1` if CS is tied low (single-device bus).
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Control pin fields">
+  <ResponseField name="pin_tft_dc" type="int8_t">
+    GPIO pin for the Data/Command (D/C or RS) line. High = data, Low = command.
+  </ResponseField>
+  <ResponseField name="pin_tft_rd" type="int8_t">
+    GPIO pin for the parallel-bus Read strobe. `-1` for SPI interfaces.
+  </ResponseField>
+  <ResponseField name="pin_tft_wr" type="int8_t">
+    GPIO pin for the parallel-bus Write strobe. `-1` for SPI interfaces.
+  </ResponseField>
+  <ResponseField name="pin_tft_rst" type="int8_t">
+    GPIO pin for hardware Reset. `-1` if reset is not connected.
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Parallel data bus pin fields (D0–D7)">
+  <ResponseField name="pin_tft_d0 .. pin_tft_d7" type="int8_t">
+    GPIO pin numbers for the 8-bit parallel data bus. All are `-1` on SPI configurations.
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Backlight and touch fields">
+  <ResponseField name="pin_tft_led" type="int8_t">
+    GPIO pin connected to the display backlight control. `-1` if not used.
+  </ResponseField>
+  <ResponseField name="pin_tft_led_on" type="int8_t">
+    Logic level (`0` or `1`) that switches the backlight ON. Some modules use active-low backlight drivers.
+  </ResponseField>
+  <ResponseField name="pin_tch_cs" type="int8_t">
+    Chip-select pin for the XPT2046 (or compatible) touch controller. `-1` if no touch controller is configured.
+  </ResponseField>
+</Expandable>
+
+<Expandable title="SPI frequency fields">
+  <ResponseField name="tft_spi_freq" type="int16_t">
+    Configured TFT write SPI clock frequency. Derived from `SPI_FREQUENCY`.
+  </ResponseField>
+  <ResponseField name="tft_rd_freq" type="int16_t">
+    Configured TFT read SPI clock frequency. Derived from `SPI_READ_FREQUENCY`.
+  </ResponseField>
+  <ResponseField name="tch_spi_freq" type="int16_t">
+    Configured touch controller SPI clock frequency. Derived from `SPI_TOUCH_FREQUENCY`.
+  </ResponseField>
+</Expandable>
+
+---
+
+## Verifying setup identity with `verifySetupID()`
+
+If you distribute a project that requires a specific `User_Setup.h` configuration, you can embed a numeric ID in that file and then assert it at runtime so users get an early warning if they compiled with the wrong setup file:
+
+```cpp verifySetupID usage
+// In User_Setup.h:
+//   #define USER_SETUP_ID  101
+
+setup_t cfg;
+tft.getSetup(cfg);
+
+if (cfg.setup_id != 101) {
+  Serial.println("ERROR: wrong User_Setup.h — expected setup ID 101");
+  while (true) {}  // halt
+}
+```
+
+---
+
+## Complete diagnostics example
+
+Run this sketch whenever you port your project to a new board or display module. Seeing the actual pin assignments and driver code in Serial Monitor is the fastest way to confirm that `User_Setup.h` is correct.
+
+```cpp full diagnostics sketch
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  Serial.begin(115200);
+  tft.init();
+
+  setup_t cfg;
+  tft.getSetup(cfg);
+
+  Serial.print("TFT_eSPI version : "); Serial.println(cfg.version);
+  Serial.print("Driver (hex)     : 0x");
+  Serial.println(cfg.tft_driver, HEX);
+  Serial.print("Resolution       : ");
+  Serial.print(cfg.tft_width);  Serial.print(" x ");
+  Serial.println(cfg.tft_height);
+  Serial.print("Interface        : ");
+  Serial.println(cfg.serial ? "SPI" : "Parallel");
+
+  Serial.println("--- SPI pins ---");
+  Serial.print("MOSI : "); Serial.println(cfg.pin_tft_mosi);
+  Serial.print("MISO : "); Serial.println(cfg.pin_tft_miso);
+  Serial.print("CLK  : "); Serial.println(cfg.pin_tft_clk);
+  Serial.print("CS   : "); Serial.println(cfg.pin_tft_cs);
+  Serial.print("DC   : "); Serial.println(cfg.pin_tft_dc);
+  Serial.print("RST  : "); Serial.println(cfg.pin_tft_rst);
+
+  Serial.println("--- Touch ---");
+  Serial.print("Touch CS : "); Serial.println(cfg.pin_tch_cs);
+
+  Serial.println("--- SPI frequencies ---");
+  Serial.print("Write : "); Serial.println(cfg.tft_spi_freq);
+  Serial.print("Read  : "); Serial.println(cfg.tft_rd_freq);
+  Serial.print("Touch : "); Serial.println(cfg.tch_spi_freq);
+}
+
+void loop() {}
+```
+
+<Tip>
+  A pin value of `-1` in the output means that pin is not configured. For SPI setups you expect `pin_tft_d0` through `pin_tft_d7` to all be `-1`; if they aren't, you may have accidentally selected a parallel-mode driver in `User_Setup.h`.
+</Tip>

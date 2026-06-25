@@ -1,0 +1,240 @@
+---
+title: "TFT_eSPI Constructor, Initialization, and Setup Methods"
+sidebarTitle: "Constructor & Init"
+description: "Reference for TFT_eSPI construction, begin/init, rotation, display inversion, setup verification, and the setup_t diagnostic struct."
+---
+
+Before any drawing can occur, the `TFT_eSPI` object must be constructed and initialized. The constructor accepts optional width and height overrides that default to the values set in `User_Setup.h`, and initialization is performed by calling either `begin()` or `init()` — both are equivalent, with `begin()` retained for backwards compatibility. After initialization you can set the display orientation, invert the panel colours, and read back the full compile-time configuration through `getSetup()`.
+
+---
+
+## Method Summary
+
+| Method | Signature | Returns | Description |
+|---|---|---|---|
+| Constructor | `TFT_eSPI(int16_t _W, int16_t _H)` | — | Creates a TFT instance |
+| `begin()` | `begin(uint8_t tc)` | `void` | Initialize display hardware |
+| `init()` | `init(uint8_t tc)` | `void` | Initialize display hardware |
+| `setRotation()` | `setRotation(uint8_t r)` | `void` | Set display orientation |
+| `getRotation()` | `getRotation(void)` | `uint8_t` | Read current orientation |
+| `invertDisplay()` | `invertDisplay(bool i)` | `void` | Invert panel colours |
+| `verifySetupID()` | `verifySetupID(uint32_t id)` | `bool` | Verify compiled setup ID |
+| `getSetup()` | `getSetup(setup_t& tft_settings)` | `void` | Retrieve compile-time config |
+| `width()` | `width(void)` | `int16_t` | Current display width |
+| `height()` | `height(void)` | `int16_t` | Current display height |
+
+---
+
+## TFT_eSPI() — Constructor
+
+```cpp
+TFT_eSPI(int16_t _W = TFT_WIDTH, int16_t _H = TFT_HEIGHT)
+```
+
+Constructs a `TFT_eSPI` instance. The width and height default to the values defined in `User_Setup.h` as `TFT_WIDTH` and `TFT_HEIGHT`. You only need to supply values when overriding the configured panel dimensions.
+
+<ParamField path="_W" type="int16_t">
+  Display width in pixels. Defaults to the `TFT_WIDTH` macro defined in `User_Setup.h`.
+</ParamField>
+<ParamField path="_H" type="int16_t">
+  Display height in pixels. Defaults to the `TFT_HEIGHT` macro defined in `User_Setup.h`.
+</ParamField>
+
+```cpp title="Constructor usage"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();           // use dimensions from User_Setup.h
+TFT_eSPI tft2 = TFT_eSPI(320, 240);  // explicit 320×240 override
+```
+
+---
+
+## begin() — Initialize Display
+
+```cpp
+void begin(uint8_t tc = TAB_COLOUR)
+```
+
+Initializes the TFT display hardware. This is an alias for `init()` and is provided for backwards compatibility with older code. Either function may be used — they perform identical work.
+
+<ParamField path="tc" type="uint8_t">
+  Tab colour option for ST7735 displays only. Encodes the colour of the protective tab on the display's flexible cable. Defaults to `TAB_COLOUR` (0). Ignored for all other display drivers.
+</ParamField>
+
+```cpp title="begin() in setup()"
+void setup() {
+  tft.begin(); // initialize with default tab colour
+}
+```
+
+---
+
+## init() — Initialize Display
+
+```cpp
+void init(uint8_t tc = TAB_COLOUR)
+```
+
+Initializes the TFT display hardware, configures the SPI bus (or parallel interface), and sends the driver startup command sequence. You must call this once in `setup()` before performing any drawing operations.
+
+<ParamField path="tc" type="uint8_t">
+  Tab colour option for ST7735 displays only. Defaults to `TAB_COLOUR` (0).
+</ParamField>
+
+```cpp title="Minimal init() setup"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+}
+```
+
+---
+
+## setRotation() — Set Display Orientation
+
+```cpp
+void setRotation(uint8_t r)
+```
+
+Rotates the display coordinate system. The physical pixel buffer is not moved; instead the x/y mapping is remapped so that `(0, 0)` is always the top-left of the rotated view. Calling `setRotation()` also updates the values returned by `width()` and `height()` to reflect the new orientation. Values 4–7 are used internally for BMP drawing and mirror the 0–3 orientations.
+
+<ParamField path="r" type="uint8_t">
+  Rotation value:
+  - `0` — Portrait, no rotation
+  - `1` — Landscape, 90° clockwise
+  - `2` — Portrait, 180° (upside-down)
+  - `3` — Landscape, 270° clockwise (90° counter-clockwise)
+</ParamField>
+
+```cpp title="Setting landscape orientation"
+tft.setRotation(1); // landscape, (0,0) at top-left
+```
+
+---
+
+## getRotation() — Read Current Orientation
+
+```cpp
+uint8_t getRotation(void)
+```
+
+Returns the current rotation value last set by `setRotation()`.
+
+<ResponseField name="return" type="uint8_t">
+  Current rotation value (0–3).
+</ResponseField>
+
+```cpp title="Reading rotation"
+uint8_t r = tft.getRotation();
+Serial.println(r); // prints 0, 1, 2, or 3
+```
+
+---
+
+## width() / height() — Display Dimensions
+
+```cpp
+int16_t width(void)
+int16_t height(void)
+```
+
+Return the pixel dimensions of the display for the **current rotation**. After a call to `setRotation(1)` (landscape), `width()` returns the longer axis and `height()` the shorter axis — swapped relative to rotation 0.
+
+<ResponseField name="return" type="int16_t">
+  Current display width or height in pixels.
+</ResponseField>
+
+```cpp title="Using dimensions for centering"
+int xCenter = tft.width()  / 2;
+int yCenter = tft.height() / 2;
+tft.drawCircle(xCenter, yCenter, 40, TFT_WHITE);
+```
+
+---
+
+## invertDisplay() — Invert Panel Colours
+
+```cpp
+void invertDisplay(bool i)
+```
+
+Sends the hardware invert-display command to the driver IC. When enabled, every pixel colour is bitwise-inverted at the panel level at no CPU cost per pixel. This is useful for switching between light and dark modes or for diagnostic testing.
+
+<ParamField path="i" type="bool">
+  `true` to invert display colours; `false` to restore normal colour output.
+</ParamField>
+
+```cpp title="Toggling colour inversion"
+tft.invertDisplay(true);  // invert all colours
+delay(500);
+tft.invertDisplay(false); // restore normal
+```
+
+---
+
+## verifySetupID() — Check Setup ID
+
+```cpp
+bool verifySetupID(uint32_t id)
+```
+
+Compares the given `id` against the `setup_id` compiled into the library via `User_Setup.h`. Use this in diagnostic sketches to confirm that the correct hardware configuration is active before attempting to draw.
+
+<ParamField path="id" type="uint32_t">
+  The expected setup ID value to compare against the compiled configuration.
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  `true` if `id` matches the compiled setup ID, `false` otherwise.
+</ResponseField>
+
+```cpp title="Verifying setup ID at startup"
+void setup() {
+  tft.init();
+  if (!tft.verifySetupID(0x9341)) {
+    Serial.println("Wrong display driver configured!");
+    while (1); // halt
+  }
+}
+```
+
+---
+
+## getSetup() — Retrieve Compile-Time Configuration
+
+```cpp
+void getSetup(setup_t& tft_settings)
+```
+
+Populates a `setup_t` struct with the full set of compile-time configuration values: driver code, pin assignments, SPI frequencies, interface type, and more. This function has zero impact on code size unless it is actually called and is primarily intended for diagnostic sketches.
+
+<ParamField path="tft_settings" type="setup_t&">
+  Reference to a `setup_t` struct that will be populated with the current configuration. You must declare and own the struct instance — the library writes into it but does not allocate it.
+</ParamField>
+
+```cpp title="Printing setup information"
+setup_t cfg;
+tft.getSetup(cfg);
+
+Serial.print("Library version: ");
+Serial.println(cfg.version);
+Serial.print("Driver: 0x");
+Serial.println(cfg.tft_driver, HEX);
+Serial.print("Resolution: ");
+Serial.print(cfg.tft_width);
+Serial.print("x");
+Serial.println(cfg.tft_height);
+Serial.print("MOSI pin: ");
+Serial.println(cfg.pin_tft_mosi);
+Serial.print("SPI freq: ");
+Serial.println(cfg.tft_spi_freq);
+```
+
+<Note>
+  The `setup_t` struct includes fields for the library version string, SPI pin numbers, parallel bus pins, touch controller pins, SPI frequencies, display offsets for all four rotations, and the interface type. See the [Overview](/api/tft-espi/overview) page for the full struct definition.
+</Note>

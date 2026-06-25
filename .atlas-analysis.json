@@ -1,26 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "TFT_eSPI",
+  "projectType": "sdk-library",
+  "projectName": "TFT_eSPI",
+  "projectDescription": "A high-performance Arduino and PlatformIO TFT graphics library for ESP32, ESP8266, RP2040, and STM32 microcontrollers, delivering 3–10× faster rendering than generic alternatives.",
   "theme": "luma",
-  "colors": {
-    "primary": "#54545c"
-  },
-  "favicon": "https://icons.duckduckgo.com/ip3/starter.mintlify.com.ico",
-  "logo": {
-    "light": "https://media.brand.dev/99d23bb0-7527-48e5-b2c1-71011df3a4d8.svg",
-    "dark": "https://media.brand.dev/99d23bb0-7527-48e5-b2c1-71011df3a4d8.svg"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/Bodmer/TFT_eSPI"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/Bodmer/TFT_eSPI"
-    }
-  },
+  "primaryColor": "#54545c",
+  "lightColor": null,
+  "darkColor": null,
   "navigation": {
     "tabs": [
       {
@@ -116,5 +101,38 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "3–10× faster rendering than generic Arduino TFT libraries using processor-specific optimizations",
+    "Supports ESP32, ESP8266, RP2040 (Raspberry Pi Pico), and STM32 microcontrollers",
+    "Multiple interface types: 4-wire SPI, 8-bit parallel, and 16-bit parallel (RP2040 only)",
+    "Hardware DMA support on RP2040, ESP32/S3, and STM32 for non-blocking pixel transfers",
+    "TFT_eSprite off-screen rendering buffer for flicker-free animation",
+    "Built-in XPT2046 SPI touch controller integration",
+    "Flexible font system: Adafruit GFX fonts plus smooth anti-aliased VLW TrueType-style fonts",
+    "Wide display controller support: ILI9341, ST7789, ST7735, ST7796, GC9A01, HX8357, SSD1351, and more",
+    "TFT_eSPI_Button widget for interactive touchscreen UI elements",
+    "PlatformIO per-project configuration via build_flags — no shared file editing required"
+  ],
+  "publicApiSurface": [
+    "TFT_eSPI(int16_t _W, int16_t _H)",
+    "void begin(uint8_t tc) / void init(uint8_t tc)",
+    "void setRotation(uint8_t r)",
+    "void fillScreen(uint32_t color)",
+    "void drawPixel(int32_t x, int32_t y, uint32_t color)",
+    "void drawLine(int32_t xs, int32_t ys, int32_t xe, int32_t ye, uint32_t color)",
+    "void drawRect / drawRoundRect / drawCircle / drawEllipse / drawTriangle",
+    "void drawArc / drawSmoothArc / drawWedgeLine / drawWideLine / drawSpot",
+    "void fillRect / fillRoundRect / fillCircle / fillEllipse / fillTriangle",
+    "void fillRectVGradient / fillRectHGradient",
+    "int16_t drawString / drawCentreString / drawRightString",
+    "int16_t drawNumber / drawFloat / drawChar",
+    "void setTextColor / setTextSize / setTextFont / setTextDatum / setTextPadding / setTextWrap",
+    "void setCursor(int16_t x, int16_t y)",
+    "void setViewport(int32_t x, int32_t y, int32_t w, int32_t h, bool vpDatum)",
+    "uint16_t readPixel(int32_t x, int32_t y)",
+    "int16_t height(void) / int16_t width(void)",
+    "void drawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, int16_t w, int16_t h, uint16_t fgcolor)",
+    "TFT_eSPI_Button::initButton / drawButton / contains / press / isPressed / justPressed / justReleased"
+  ]
 }

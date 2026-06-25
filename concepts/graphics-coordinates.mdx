@@ -1,0 +1,124 @@
+---
+title: "TFT_eSPI Pixel Coordinate System and Screen Dimensions"
+sidebarTitle: "Coordinates"
+description: "Understand TFT_eSPI's pixel coordinate system, how rotation remaps width and height, viewport clipping regions, and how to write rotation-agnostic layout code."
+---
+
+Every pixel you draw in TFT_eSPI is addressed through a straightforward two-dimensional coordinate system anchored to the top-left corner of the display. Understanding how that system works — and how it shifts when you rotate the screen — is essential for writing layout code that adapts cleanly across different display orientations and sizes.
+
+## The Pixel Coordinate System
+
+TFT_eSPI uses a **pixel-based Cartesian coordinate system** defined by two axes:
+
+- **X axis** — horizontal, increasing from **left to right**.
+- **Y axis** — vertical, increasing from **top to bottom**.
+- **Origin `(0, 0)`** — the **top-left corner** of the display after the current rotation is applied.
+
+All drawing functions accept integer pixel coordinates. There is no sub-pixel unit and no scaling — one coordinate unit equals exactly one physical pixel. For a 240 × 320 display in its default portrait orientation, the four corners are:
+
+| Corner       | Coordinate   |
+|--------------|:------------:|
+| Top-left     | `(0, 0)`     |
+| Top-right    | `(239, 0)`   |
+| Bottom-left  | `(0, 319)`   |
+| Bottom-right | `(239, 319)` |
+
+## How Rotation Affects Coordinates
+
+Calling `setRotation(m)` with a value of `0–3` physically remaps the coordinate origin and axes so that `(0, 0)` always refers to the top-left corner of the display **as it is held in the chosen orientation**. The physical panel dimensions are fixed, but the logical `width()` and `height()` swap when you move between portrait and landscape modes.
+
+| `setRotation(m)` | Orientation              | `width()`  | `height()` | Origin location          |
+|:----------------:|--------------------------|:----------:|:----------:|--------------------------|
+| `0`              | Portrait (default)       | native W   | native H   | Physical top-left        |
+| `1`              | Landscape (90° CW)       | native H   | native W   | Physical bottom-left     |
+| `2`              | Portrait flipped (180°)  | native W   | native H   | Physical bottom-right    |
+| `3`              | Landscape flipped (270°) | native H   | native W   | Physical top-right       |
+
+<Note>
+  The terms "native W" and "native H" refer to the hardware dimensions specified in `User_Setup.h` (for example `TFT_WIDTH` and `TFT_HEIGHT`). For a 240 × 320 panel, `width()` returns `240` in rotation 0 and `320` in rotation 1.
+</Note>
+
+## Querying Width and Height at Runtime
+
+Always query the display dimensions through `width()` and `height()` rather than hard-coding numbers. Both methods return the **current rotated dimensions** and update automatically whenever you call `setRotation()`.
+
+```cpp
+int16_t TFT_eSPI::width(void);   // Returns current logical width in pixels
+int16_t TFT_eSPI::height(void);  // Returns current logical height in pixels
+```
+
+This makes it trivial to write rotation-agnostic layout code that works correctly in every orientation:
+
+```cpp
+// Center a circle regardless of the current rotation
+int centerX = tft.width()  / 2;
+int centerY = tft.height() / 2;
+
+tft.drawCircle(centerX, centerY, 20, TFT_WHITE);
+```
+
+## Centering and Aligning Content
+
+A common pattern is to position text or shapes relative to the screen edges. Using `width()` and `height()` as reference dimensions keeps your layout portable across any rotation:
+
+```cpp
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);           // Landscape
+  tft.fillScreen(TFT_BLACK);
+
+  // Center a string on screen using MC_DATUM
+  tft.setTextDatum(MC_DATUM);   // Middle-centre reference point
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString("Centered!", tft.width() / 2, tft.height() / 2, 4);
+
+  // Draw a border 10 pixels inside the screen edges
+  int margin = 10;
+  tft.drawRect(margin, margin,
+               tft.width()  - margin * 2,
+               tft.height() - margin * 2,
+               TFT_CYAN);
+}
+
+void loop() {}
+```
+
+<Tip>
+  Combine `width()` / `height()` with text datum constants like `MC_DATUM` (middle-centre) or `BC_DATUM` (bottom-centre) to position text without manually measuring string pixel widths. See the [Fonts & Datums](/concepts/fonts-and-datums) page for the full datum table.
+</Tip>
+
+## Viewport Coordinates and Clipping
+
+TFT_eSPI supports a **viewport** — a clipping rectangle that constrains all drawing to a sub-region of the screen. When a viewport is active, coordinates can be interpreted in two different ways depending on how you created it:
+
+- **Viewport with datum enabled** (`vpDatum = true`, the default): The coordinate origin `(0, 0)` shifts to the top-left of the viewport. All subsequent drawing calls use coordinates relative to the viewport rather than the full screen.
+- **Viewport with datum disabled** (`vpDatum = false`): Coordinates remain relative to the full screen. Pixels that fall outside the viewport rectangle are silently clipped and never written to the display.
+
+```cpp
+// Define a 200×100 viewport at screen position (20, 40)
+// with datum enabled — (0, 0) becomes the viewport's top-left
+tft.setViewport(20, 40, 200, 100, true);
+
+// This draws at (10, 10) *within* the viewport
+// which maps to screen position (30, 50)
+tft.drawPixel(10, 10, TFT_RED);
+
+// Restore full-screen drawing
+tft.resetViewport();
+```
+
+<Note>
+  `width()` and `height()` always reflect the **full screen** dimensions even when a viewport is active. Use `getViewportWidth()` and `getViewportHeight()` to query the active viewport size when laying out content within it.
+</Note>
+
+## Out-of-Bounds Coordinates
+
+Drawing calls that reference coordinates outside the screen boundary (or outside an active viewport) are silently clipped. The library does not throw an error or halt — pixels that would land off-screen are simply not written. This means you can safely pass negative or oversized coordinates without defensive range checks in your own code, though you should be aware that partially off-screen shapes are drawn only up to the display edge.
+
+## Axis Resolution
+
+The axis resolution in TFT_eSPI is fixed at **1 pixel per coordinate unit** on both axes. There is no fractional addressing in the standard drawing API. The anti-aliased drawing functions — `drawWideLine()`, `drawSpot()`, and `drawSmoothArc()` — accept `float` arguments to position elements with sub-pixel precision, but the underlying rasterisation still maps to whole pixels on the physical panel.

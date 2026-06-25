@@ -1,0 +1,253 @@
+---
+title: "RM68120 TFT Display: Setup and Configuration Guide"
+sidebarTitle: "RM68120"
+description: "Set up the Raydium RM68120 16.7M-colour WVGA TFT with TFT_eSPI — driver files are included but hardware testing is unconfirmed; proceed with caution."
+---
+
+The RM68120 is a high-density single-chip TFT driver manufactured by Raydium Semiconductor Corporation, targeting WVGA-class portable displays in smartphones, PMPs, and other compact devices. It supports resolutions from 480 RGB × 360 up to 480 RGB × 864 dots with an internal GRAM and delivers 16.7 million colours — a significant step up from the 262K-colour controllers common in the TFT_eSPI ecosystem. The library includes driver configuration files for the RM68120, making it straightforward to attempt integration, though caution is warranted given the current testing status.
+
+<Warning>
+  Support files for the RM68120 have been added to TFT_eSPI, but **the driver
+  is untested**. Hardware verification has not been confirmed by the library
+  maintainer. Proceed with the expectation that you may need to troubleshoot
+  initialisation sequences or register settings before achieving a working
+  display. Community feedback and pull requests with verified configurations are
+  welcome.
+</Warning>
+
+## Controller Overview
+
+The RM68120 is a SoC driver for a-Si TFT LCD panels integrating a 1,440-channel source driver, gate-control timing via level shift, 1,244,160 bytes of on-chip GRAM (for the 480 × 864 configuration), and a complete power supply circuit. It is designed around a 1.65 V I/O interface voltage with an internal voltage follower generating all required LCD drive rails.
+
+The controller's support for SPI, parallel MCU bus, I²C, RGB video, MDDI, and MIPI DSI interfaces makes it one of the most versatile controllers in the library's supported list, though TFT_eSPI exercises only the SPI and parallel MCU paths.
+
+### Key Specifications
+
+| Parameter              | Value                                                        |
+| ---------------------- | ------------------------------------------------------------ |
+| Maximum resolution     | 480 RGB × 864 dots (with GRAM)                               |
+| Bypass-GRAM resolution | 480 RGB × 1024 dots                                          |
+| On-chip GRAM           | 480 × 3 × 864 = 1,244,160 bytes                              |
+| Colour depth           | 16.7M (24-bit), 262K (18-bit), 65K (16-bit), 8-colour idle  |
+| Source driver channels | 1,440                                                        |
+| System interfaces      | 8/16/24-bit 80-series MCU, 16-bit SPI, I²C                   |
+| Video interfaces       | 16/18/24-bit RGB (SYNC and DE mode)                          |
+| High-speed interfaces  | MDDI V1.2, MIPI DSI V1.01                                    |
+| I/O supply (IOVCC)     | 1.65 V – 3.3 V                                               |
+| Low-swing I/O (IOVCCL) | 1.1 V – 1.3 V                                                |
+| Operating temperature  | −30 °C to +70 °C                                             |
+
+### Supported Resolutions
+
+The RM68120 can be configured for several display panel sizes, all sharing the 480-pixel horizontal dimension:
+
+<Tabs>
+  <Tab title="With GRAM">
+    | Option | Resolution     |
+    | ------ | -------------- |
+    | 1      | 480 RGB × 360  |
+    | 2      | 480 RGB × 640  |
+    | 3      | 480 RGB × 720  |
+    | 4      | 480 RGB × 800  |
+    | 5      | 480 RGB × 854  |
+    | 6      | 480 RGB × 864  |
+  </Tab>
+  <Tab title="Bypass GRAM">
+    | Option | Resolution      |
+    | ------ | --------------- |
+    | 1      | 480 RGB × 1024  |
+
+    Bypass-GRAM mode streams pixel data directly from the host without storing it
+    in the on-chip frame buffer — useful for hosts with sufficient RAM and
+    high-bandwidth interfaces.
+  </Tab>
+</Tabs>
+
+## Interface Options
+
+<CardGroup cols={2}>
+  <Card title="Parallel MCU Bus" icon="table-columns" href="/hardware/rm68120">
+    8-bit, 16-bit, or 24-bit 80-series (Intel) parallel interface. Highest
+    throughput option when GPIO count permits.
+  </Card>
+  <Card title="SPI (16-bit)" icon="arrows-left-right" href="/hardware/rm68120">
+    16-bit serial peripheral interface. Lower pin count at the expense of raw
+    fill rate.
+  </Card>
+  <Card title="I²C" icon="link" href="/hardware/rm68120">
+    Low-pin-count bus, typically used for configuration commands rather than
+    pixel data.
+  </Card>
+  <Card title="RGB Video" icon="film" href="/hardware/rm68120">
+    16/18/24-bit RGB interface with SYNC or DE mode for framebuffer-driven SoCs.
+  </Card>
+</CardGroup>
+
+TFT_eSPI targets the **parallel MCU bus** and **SPI** paths. The RGB, MDDI, and MIPI DSI interfaces are outside the library's scope.
+
+## Configuration
+
+<Steps>
+  <Step title="Select the RM68120 driver">
+    Open `User_Setup.h` and enable the RM68120 driver. Disable all other driver
+    definitions:
+
+    ```cpp User_Setup.h
+    #define RM68120_DRIVER
+    ```
+  </Step>
+
+  <Step title="Set display dimensions">
+    Choose the vertical resolution to match your specific panel. The most common
+    WVGA variant is 480 × 800:
+
+    ```cpp User_Setup.h
+    #define TFT_WIDTH  480
+    #define TFT_HEIGHT 800   // Adjust to match your panel: 360, 640, 720, 800, 854, or 864
+    ```
+  </Step>
+
+  <Step title="Define pin assignments (SPI example, ESP32)">
+    ```cpp User_Setup.h
+    #define TFT_MOSI 23
+    #define TFT_SCLK 18
+    #define TFT_CS   15
+    #define TFT_DC    2
+    #define TFT_RST   4
+    #define TFT_MISO 19   // Optional
+    ```
+  </Step>
+
+  <Step title="Set SPI frequency">
+    Start conservatively with a lower clock speed when first testing an untested
+    display configuration — you can increase it once basic pixel output is
+    confirmed:
+
+    ```cpp User_Setup.h
+    #define SPI_FREQUENCY      20000000   // 20 MHz — safe starting point
+    // #define SPI_FREQUENCY   27000000   // Increase once basic display works
+    #define SPI_READ_FREQUENCY 20000000
+    ```
+  </Step>
+</Steps>
+
+### Complete User_Setup.h Example (ESP32 SPI, 480×800)
+
+```cpp User_Setup.h
+// ---- Driver selection -----------------------------------------------
+#define RM68120_DRIVER
+
+// ---- Display dimensions ---------------------------------------------
+#define TFT_WIDTH  480
+#define TFT_HEIGHT 800
+
+// ---- Pin definitions (ESP32 VSPI) -----------------------------------
+#define TFT_MOSI 23
+#define TFT_SCLK 18
+#define TFT_CS   15
+#define TFT_DC    2
+#define TFT_RST   4
+#define TFT_MISO 19
+
+// ---- SPI clock frequencies ------------------------------------------
+#define SPI_FREQUENCY      20000000
+#define SPI_READ_FREQUENCY 20000000
+
+// ---- Fonts (uncomment as needed) ------------------------------------
+// #define LOAD_GLCD
+// #define LOAD_FONT2
+// #define LOAD_FONT4
+// #define SMOOTH_FONT
+```
+
+## Power Supply Architecture
+
+The RM68120 incorporates an on-module DC/DC converter that generates all LCD drive voltages from the VCI input. The output rails and their typical operating ranges are:
+
+| Rail   | Range                    | Function                            |
+| ------ | ------------------------ | ----------------------------------- |
+| DDVDH  | +4.5 V to +6.5 V         | Positive source driver supply       |
+| DDVDL  | −4.5 V to −6.5 V         | Negative source driver supply       |
+| VCL    | −2.5 V to −4.0 V         | Negative LCD drive                  |
+| VGMP   | +3.5 V to +5.0 V         | Positive gamma high voltage         |
+| VGSP   | 0.0 V, +0.3 V to +3.7 V  | Positive gamma low voltage          |
+| VGMN   | −5.0 V to −3.5 V         | Negative gamma high voltage         |
+| VGSN   | 0.0 V, −0.3 V to −3.7 V  | Negative gamma low voltage          |
+| VGH    | +8 V to +18 V            | Gate-on drive voltage               |
+| VGL    | −2 V to −15 V            | Gate-off drive voltage              |
+| VCOM   | −3.5 V to 0 V            | Common electrode VCOM               |
+
+## Power-Saving Modes
+
+The RM68120 provides three hardware-controlled power-saving modes:
+
+| Mode          | Description                                                      |
+| ------------- | ---------------------------------------------------------------- |
+| Deep Standby  | All internal circuits off — lowest power state                   |
+| Sleep Mode    | Controller halted, GRAM retained; fast wake-up available         |
+| 8-Color Idle  | Reduced to 8-colour display to cut power while remaining visible |
+
+## Display Quality Features
+
+The RM68120 includes several hardware features that improve display quality without CPU involvement:
+
+- **Programmable γ-correction** — individual gamma curves for each of the R, G, and B channels for the full 16.7M colour mode.
+- **Inversion modes** — supports 1-dot, 2-dot, 3-dot, 4-dot, column, and zigzag inversion to eliminate flicker.
+- **Partial display function** — a rectangular window area of the GRAM can be refreshed independently of the rest of the screen.
+- **Window address function** — limits GRAM writes to a defined rectangular region, enabling efficient sprite and region updates.
+- **On-chip checksum** — hardware checksumming of GRAM contents to detect data corruption.
+- **Four GPO pins** — general-purpose output pins for external control (e.g. backlight, reset of peripheral ICs).
+- **Power supply startup sequencer** — automatic power-on sequencing removes the need for host-side delay loops during initialisation.
+
+## Basic Usage
+
+```cpp RM68120 basic usage
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(0);          // Portrait: 480 wide × 800 tall
+  tft.fillScreen(TFT_BLACK);
+
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.setTextFont(4);
+  tft.drawString("RM68120 Init OK", 20, 20);
+}
+
+void loop() {
+  // Simple colour sweep to verify display operation
+  tft.fillScreen(TFT_RED);   delay(500);
+  tft.fillScreen(TFT_GREEN); delay(500);
+  tft.fillScreen(TFT_BLUE);  delay(500);
+}
+```
+
+<Tip>
+  When bringing up an untested display for the first time, start with
+  `tft.fillScreen()` calls using primary colours (red, green, blue) to confirm
+  pixel output is working before attempting text or graphics. A solid red,
+  green, or blue screen rules out wiring and power supply problems quickly.
+</Tip>
+
+## RM68140 Variant
+
+The closely related **RM68140** targets a 480 × 320 landscape panel and uses the same parallel interface. You can select it in `User_Setup.h` with:
+
+```cpp User_Setup.h
+#define RM68140_DRIVER
+
+#define TFT_WIDTH  480
+#define TFT_HEIGHT 320
+```
+
+All other pin and frequency settings follow the same pattern as the RM68120 configuration above.
+
+## Datasheet Reference
+
+The full RM68120 datasheet, including register definitions and initialisation sequences, is available at:
+
+```text
+https://www.displayfuture.com/Display/datasheet/controller/RM68120.pdf
+```

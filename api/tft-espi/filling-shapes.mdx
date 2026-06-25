@@ -1,0 +1,305 @@
+---
+title: "TFT_eSPI Shape Filling, Screen, and Gradient Methods"
+sidebarTitle: "Filling Shapes"
+description: "Complete reference for TFT_eSPI fill methods: fillScreen, filled rectangles, circles, ellipses, triangles, smooth fills, and gradient rectangles."
+---
+
+TFT_eSPI provides a complete set of fill methods that paint the interior of shapes with a solid colour, a gradient, or an anti-aliased smooth finish. These complement the outline-only drawing methods on the [Drawing Shapes](/api/tft-espi/drawing-shapes) page. All coordinates use screen pixels with `(0, 0)` at the top-left of the current rotation. Colours should be 16-bit RGB565 values or `TFT_*` colour constants unless the method signature specifies `uint32_t`, in which case a 24-bit value is also accepted.
+
+## Method Summary
+
+| Method | Signature | Returns | Description |
+|---|---|---|---|
+| `fillScreen()` | `fillScreen(color)` | `void` | Fill entire display |
+| `fillRect()` | `fillRect(x, y, w, h, color)` | `void` | Solid filled rectangle |
+| `fillRoundRect()` | `fillRoundRect(x, y, w, h, radius, color)` | `void` | Filled rounded rectangle |
+| `fillSmoothRoundRect()` | `fillSmoothRoundRect(x, y, w, h, r, color, bg)` | `void` | AA filled rounded rectangle |
+| `fillCircle()` | `fillCircle(x, y, r, color)` | `void` | Solid filled circle |
+| `fillSmoothCircle()` | `fillSmoothCircle(x, y, r, color, bg)` | `void` | AA filled circle |
+| `fillCircleHelper()` | `fillCircleHelper(x, y, r, corner, delta, color)` | `void` | Quadrant fill helper |
+| `fillEllipse()` | `fillEllipse(x, y, rx, ry, color)` | `void` | Solid filled ellipse |
+| `fillTriangle()` | `fillTriangle(x1,y1, x2,y2, x3,y3, color)` | `void` | Solid filled triangle |
+| `fillRectVGradient()` | `fillRectVGradient(x, y, w, h, c1, c2)` | `void` | Vertical gradient rectangle |
+| `fillRectHGradient()` | `fillRectHGradient(x, y, w, h, c1, c2)` | `void` | Horizontal gradient rectangle |
+
+---
+
+## fillScreen() — Clear / Fill Entire Screen
+
+```cpp
+void fillScreen(uint32_t color)
+```
+
+Fills the entire visible screen area (within the current rotation) with a solid colour. This is the fastest way to clear the display at the start of each frame or after a rotation change.
+
+<ParamField path="color" type="uint32_t">
+  Fill colour. Use a `TFT_*` constant (e.g. `TFT_BLACK`) or an RGB565 value.
+</ParamField>
+
+```cpp title="Clearing the display"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK); // clear to black
+}
+```
+
+---
+
+## fillRect() — Filled Rectangle
+
+```cpp
+void fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color)
+```
+
+Draws a solid filled rectangle. The top-left corner is positioned at `(x, y)` and the rectangle extends `w` pixels to the right and `h` pixels downward.
+
+<ParamField path="x" type="int32_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int32_t">Rectangle width in pixels.</ParamField>
+<ParamField path="h" type="int32_t">Rectangle height in pixels.</ParamField>
+<ParamField path="color" type="uint32_t">Fill colour.</ParamField>
+
+```cpp title="Drawing a filled rectangle"
+tft.fillRect(20, 20, 100, 60, TFT_RED);
+```
+
+---
+
+## fillRoundRect() — Filled Rounded Rectangle
+
+```cpp
+void fillRoundRect(int32_t x, int32_t y, int32_t w, int32_t h,
+                   int32_t radius, uint32_t color)
+```
+
+Draws a solid filled rectangle with rounded corners. Increasing `radius` beyond half the shorter dimension will produce a pill or oval shape.
+
+<ParamField path="x" type="int32_t">X coordinate of the bounding box top-left corner.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the bounding box top-left corner.</ParamField>
+<ParamField path="w" type="int32_t">Width of the rectangle.</ParamField>
+<ParamField path="h" type="int32_t">Height of the rectangle.</ParamField>
+<ParamField path="radius" type="int32_t">Corner arc radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t">Fill colour.</ParamField>
+
+```cpp title="Drawing a filled rounded rectangle"
+tft.fillRoundRect(10, 10, 120, 80, 12, TFT_BLUE);
+```
+
+---
+
+## fillSmoothRoundRect() — Anti-Aliased Filled Rounded Rectangle
+
+```cpp
+void fillSmoothRoundRect(int32_t x, int32_t y, int32_t w, int32_t h,
+                         int32_t radius, uint32_t color,
+                         uint32_t bg_color = 0x00FFFFFF)
+```
+
+Draws a solid filled rounded rectangle with anti-aliased edges. Edge pixels are blended with `bg_color`. When `bg_color` is omitted (`0x00FFFFFF`), the background colour is read from the display for each edge pixel, making this safe to use over any background without knowing its colour in advance.
+
+<ParamField path="x" type="int32_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int32_t">Rectangle width.</ParamField>
+<ParamField path="h" type="int32_t">Rectangle height.</ParamField>
+<ParamField path="radius" type="int32_t">Corner arc radius.</ParamField>
+<ParamField path="color" type="uint32_t">Fill colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">
+  Background colour for edge anti-aliasing. Default `0x00FFFFFF` causes the background to be read from the TFT display.
+</ParamField>
+
+```cpp title="Drawing an anti-aliased filled rounded rectangle"
+tft.fillSmoothRoundRect(10, 10, 120, 80, 12, TFT_GREEN, TFT_BLACK);
+```
+
+---
+
+## fillCircle() — Filled Circle
+
+```cpp
+void fillCircle(int32_t x, int32_t y, int32_t r, uint32_t color)
+```
+
+Draws a solid filled circle. The centre is at `(x, y)` and the circle extends `r` pixels in all directions.
+
+<ParamField path="x" type="int32_t">X coordinate of the centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the centre.</ParamField>
+<ParamField path="r" type="int32_t">Radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t">Fill colour.</ParamField>
+
+```cpp title="Drawing a filled circle"
+tft.fillCircle(120, 120, 50, TFT_WHITE);
+```
+
+---
+
+## fillSmoothCircle() — Anti-Aliased Filled Circle
+
+```cpp
+void fillSmoothCircle(int32_t x, int32_t y, int32_t r,
+                      uint32_t color, uint32_t bg_color = 0x00FFFFFF)
+```
+
+Draws a solid filled circle with anti-aliased edges blended against `bg_color`. When `bg_color` is omitted the library reads the background from the display for each edge pixel.
+
+<ParamField path="x" type="int32_t">X coordinate of the centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the centre.</ParamField>
+<ParamField path="r" type="int32_t">Radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t">Fill colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">
+  Background colour for anti-aliasing. Default `0x00FFFFFF` reads from the display.
+</ParamField>
+
+```cpp title="Drawing an anti-aliased filled circle"
+tft.fillSmoothCircle(120, 120, 50, TFT_CYAN, TFT_BLACK);
+```
+
+---
+
+## fillCircleHelper() — Quadrant Fill Helper
+
+```cpp
+void fillCircleHelper(int32_t x, int32_t y, int32_t r,
+                      uint8_t cornername, int32_t delta, uint32_t color)
+```
+
+Support function used internally by `fillRoundRect()`. Fills one or more quadrant sectors of a circle. The `cornername` bitmask selects which sides to fill, and `delta` extends the fill vertically to connect the straight body of a rounded rectangle.
+
+<ParamField path="x" type="int32_t">X coordinate of the circle centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the circle centre.</ParamField>
+<ParamField path="r" type="int32_t">Radius in pixels.</ParamField>
+<ParamField path="cornername" type="uint8_t">Bitmask selecting which side to fill (0x1 = right side, 0x2 = left side).</ParamField>
+<ParamField path="delta" type="int32_t">Vertical extension for connecting the horizontal span to the rounded rect body.</ParamField>
+<ParamField path="color" type="uint32_t">Fill colour.</ParamField>
+
+<Note>
+  `fillCircleHelper()` is a low-level support function. Prefer `fillRoundRect()` or `fillCircle()` for everyday use.
+</Note>
+
+---
+
+## fillEllipse() — Filled Ellipse
+
+```cpp
+void fillEllipse(int16_t x, int16_t y, int32_t rx, int32_t ry, uint16_t color)
+```
+
+Draws a solid filled axis-aligned ellipse. Pass equal values for `rx` and `ry` to draw a circle equivalent.
+
+<ParamField path="x" type="int16_t">X coordinate of the centre.</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate of the centre.</ParamField>
+<ParamField path="rx" type="int32_t">Horizontal radius (semi-axis along X).</ParamField>
+<ParamField path="ry" type="int32_t">Vertical radius (semi-axis along Y).</ParamField>
+<ParamField path="color" type="uint16_t">Fill colour.</ParamField>
+
+```cpp title="Drawing a filled ellipse"
+tft.fillEllipse(120, 120, 60, 30, TFT_WHITE);
+```
+
+---
+
+## fillTriangle() — Filled Triangle
+
+```cpp
+void fillTriangle(int32_t x1, int32_t y1,
+                  int32_t x2, int32_t y2,
+                  int32_t x3, int32_t y3,
+                  uint32_t color)
+```
+
+Draws a solid filled triangle defined by three arbitrary vertices. The winding order of the vertices does not matter — the fill covers the interior regardless.
+
+<ParamField path="x1" type="int32_t">X coordinate of vertex 1.</ParamField>
+<ParamField path="y1" type="int32_t">Y coordinate of vertex 1.</ParamField>
+<ParamField path="x2" type="int32_t">X coordinate of vertex 2.</ParamField>
+<ParamField path="y2" type="int32_t">Y coordinate of vertex 2.</ParamField>
+<ParamField path="x3" type="int32_t">X coordinate of vertex 3.</ParamField>
+<ParamField path="y3" type="int32_t">Y coordinate of vertex 3.</ParamField>
+<ParamField path="color" type="uint32_t">Fill colour.</ParamField>
+
+```cpp title="Drawing a filled triangle"
+tft.fillTriangle(60, 10, 120, 110, 10, 110, TFT_YELLOW);
+```
+
+---
+
+## fillRectVGradient() — Vertical Gradient Rectangle
+
+```cpp
+void fillRectVGradient(int16_t x, int16_t y, int16_t w, int16_t h,
+                       uint32_t color1, uint32_t color2)
+```
+
+Fills a rectangle with a vertical colour gradient, blending linearly from `color1` at the top row to `color2` at the bottom row. Each row is rendered as a single horizontal span, so performance is comparable to a solid `fillRect()`.
+
+<ParamField path="x" type="int16_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int16_t">Rectangle width.</ParamField>
+<ParamField path="h" type="int16_t">Rectangle height.</ParamField>
+<ParamField path="color1" type="uint32_t">Gradient start colour (top edge).</ParamField>
+<ParamField path="color2" type="uint32_t">Gradient end colour (bottom edge).</ParamField>
+
+```cpp title="Drawing a vertical gradient"
+// Blue at top, fading to black at bottom
+tft.fillRectVGradient(0, 0, 240, 320, TFT_BLUE, TFT_BLACK);
+```
+
+---
+
+## fillRectHGradient() — Horizontal Gradient Rectangle
+
+```cpp
+void fillRectHGradient(int16_t x, int16_t y, int16_t w, int16_t h,
+                       uint32_t color1, uint32_t color2)
+```
+
+Fills a rectangle with a horizontal colour gradient, blending linearly from `color1` at the left edge to `color2` at the right edge. Each pixel in a row is individually coloured, so this is slower than `fillRectVGradient()` for tall rectangles.
+
+<ParamField path="x" type="int16_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int16_t">Rectangle width.</ParamField>
+<ParamField path="h" type="int16_t">Rectangle height.</ParamField>
+<ParamField path="color1" type="uint32_t">Gradient start colour (left edge).</ParamField>
+<ParamField path="color2" type="uint32_t">Gradient end colour (right edge).</ParamField>
+
+```cpp title="Drawing a horizontal gradient"
+// Red on the left, fading to green on the right
+tft.fillRectHGradient(10, 50, 200, 40, TFT_RED, TFT_GREEN);
+```
+
+---
+
+## Complete Example
+
+```cpp title="Fill methods showcase"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Solid fills
+  tft.fillRect(10, 10, 80, 50, TFT_RED);
+  tft.fillRoundRect(110, 10, 80, 50, 10, TFT_GREEN);
+  tft.fillCircle(255, 35, 25, TFT_BLUE);
+  tft.fillEllipse(310, 35, 30, 18, TFT_YELLOW);
+  tft.fillTriangle(10, 80, 80, 130, 10, 130, TFT_CYAN);
+
+  // Anti-aliased smooth fills
+  tft.fillSmoothCircle(130, 105, 22, TFT_MAGENTA, TFT_BLACK);
+  tft.fillSmoothRoundRect(165, 83, 80, 44, 10, TFT_ORANGE, TFT_BLACK);
+
+  // Gradient fills
+  tft.fillRectVGradient(0, 145, 320, 95, TFT_NAVY, TFT_BLACK);
+  tft.fillRectHGradient(10, 155, 300, 30, TFT_RED, TFT_YELLOW);
+}
+
+void loop() {}
+```

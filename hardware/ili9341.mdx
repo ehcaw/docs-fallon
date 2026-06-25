@@ -1,0 +1,250 @@
+---
+title: "ILI9341 TFT Display: Wiring and Configuration Guide"
+sidebarTitle: "ILI9341"
+description: "Wire and configure the ILI9341 240×320 SPI TFT with TFT_eSPI on ESP32, ESP8266, RP2040, and STM32 — covers User_Setup.h and PlatformIO build flags."
+---
+
+The ILI9341 is the most widely used TFT controller in the TFT_eSPI ecosystem and is the recommended starting point for anyone new to the library. Manufactured by ILI Technology Corp. (Ilitek), it drives a 240×320 pixel a-Si TFT LCD panel with 262,144 colours and is available on 2.2", 2.4", and 2.8" display modules at low cost from many suppliers. Its native 4-wire SPI interface makes it straightforward to connect to any of the supported microcontroller platforms, and the library includes a fully optimised driver with DMA support on RP2040, ESP32, ESP32-S3, and STM32Fxxx.
+
+## Controller Overview
+
+The ILI9341 is a 262,144-colour single-chip SoC driver for a-TFT liquid crystal displays with a resolution of 240 RGB × 320 dots. It incorporates a 720-channel source driver, a 320-channel gate driver, 172,800 bytes of on-chip GRAM, and an integrated power-supply circuit — making it a self-contained solution that requires only a microcontroller, decoupling capacitors, and a backlight circuit to operate.
+
+### Key Specifications
+
+| Parameter             | Value                                              |
+| --------------------- | -------------------------------------------------- |
+| Resolution            | 240 (RGB) × 320 dots                               |
+| Colour depth          | 262,144 (18-bit) / 65,536 (16-bit)                 |
+| On-chip GRAM          | 172,800 bytes                                      |
+| Interface options     | SPI (3-/4-wire), 8/9/16/18-bit MCU parallel, RGB  |
+| Logic supply (VDDI)   | 1.65 V – 3.3 V                                     |
+| Analog supply (VCI)   | 2.5 V – 3.3 V                                     |
+| Operating temperature | −40 °C to +85 °C                                   |
+| Common module sizes   | 2.2", 2.4", 2.8"                                   |
+
+### Interface Modes
+
+The ILI9341 supports multiple interface modes selectable by hardware pins on the module:
+
+- **4-wire SPI** — `MOSI`, `SCLK`, `CS`, and `DC` (also labelled `RS` or `A0`). This is the mode used by TFT_eSPI.
+- **3-wire SPI** — no dedicated DC line; command/data distinguished by an extra bit.
+- **8/9/16/18-bit parallel MCU (8080-I/II)** — higher throughput at the cost of more GPIO pins.
+- **RGB interface** — for framebuffer-driven graphic controllers.
+
+TFT_eSPI uses 4-wire SPI by default. The `DC` pin is **required** — without it the controller cannot distinguish commands from pixel data.
+
+## Wiring
+
+The tables below show standard SPI wiring for two common platforms. Adapt GPIO numbers to match your own board.
+
+<Note>
+  The `MISO` pin is optional if you only need to write to the display and do
+  not read pixel data back. Many modules omit the `MISO` pad entirely.
+</Note>
+
+### ESP32 Wiring
+
+| ILI9341 Pin | Signal        | ESP32 GPIO | Notes                                        |
+| ----------- | ------------- | ---------- | -------------------------------------------- |
+| VCC         | 3.3 V power   | 3V3        | Do **not** connect to 5 V                    |
+| GND         | Ground        | GND        |                                              |
+| CS          | Chip Select   | GPIO 15    | Active low; define as `TFT_CS`               |
+| RESET       | Reset         | GPIO 4     | Define as `TFT_RST`; tie to 3V3 if unused    |
+| DC / RS     | Data/Command  | GPIO 2     | Define as `TFT_DC`                           |
+| MOSI / SDI  | SPI Data In   | GPIO 23    | VSPI MOSI                                    |
+| SCLK / SCK  | SPI Clock     | GPIO 18    | VSPI SCLK                                    |
+| LED / BL    | Backlight     | 3V3 or PWM | 3V3 for full brightness; PWM for dimming     |
+| MISO / SDO  | SPI Data Out  | GPIO 19    | Optional; needed for pixel readback          |
+
+### RP2040 (Raspberry Pi Pico) Wiring
+
+| ILI9341 Pin | Signal        | Pico GPIO  | Notes                            |
+| ----------- | ------------- | ---------- | -------------------------------- |
+| VCC         | 3.3 V power   | 3V3(OUT)   |                                  |
+| GND         | Ground        | GND        |                                  |
+| CS          | Chip Select   | GP17       | Define as `TFT_CS`               |
+| RESET       | Reset         | GP15       | Define as `TFT_RST`              |
+| DC / RS     | Data/Command  | GP16       | Define as `TFT_DC`               |
+| MOSI        | SPI TX        | GP19       | SPI0 TX                          |
+| SCLK        | SPI Clock     | GP18       | SPI0 SCK                         |
+| LED / BL    | Backlight     | 3V3(OUT)   |                                  |
+| MISO        | SPI RX        | GP16       | SPI0 RX (optional)               |
+
+## Configuration
+
+TFT_eSPI is configured entirely inside the library's `User_Setup.h` file, or via `build_flags` in `platformio.ini`. No configuration should be placed in the Arduino sketch itself.
+
+<Steps>
+  <Step title="Open User_Setup.h">
+    Locate `User_Setup.h` in the TFT_eSPI library folder. On Windows this is
+    typically:
+
+    ```text
+    C:\Users\<YourName>\Documents\Arduino\libraries\TFT_eSPI\User_Setup.h
+    ```
+
+    On macOS/Linux the path is `~/Arduino/libraries/TFT_eSPI/User_Setup.h`.
+  </Step>
+
+  <Step title="Select the ILI9341 driver">
+    Uncomment the ILI9341 driver definition and comment out any others:
+
+    ```cpp User_Setup.h
+    // Only one driver definition must be active at a time
+    #define ILI9341_DRIVER       // Generic driver for common displays
+    // #define ILI9341_2_DRIVER  // Alternative init for some ILI9341 clones
+    ```
+
+    <Tip>
+      If your display shows inverted colours or incorrect initialisation, try
+      `ILI9341_2_DRIVER` instead — some clone modules use a slightly different
+      register sequence.
+    </Tip>
+  </Step>
+
+  <Step title="Set the display dimensions">
+    The ILI9341 is 240 × 320 pixels in portrait orientation:
+
+    ```cpp User_Setup.h
+    #define TFT_WIDTH  240
+    #define TFT_HEIGHT 320
+    ```
+  </Step>
+
+  <Step title="Define the pin assignments">
+    Match these to your actual wiring. The example below uses ESP32 VSPI
+    defaults:
+
+    ```cpp User_Setup.h
+    #define TFT_MOSI 23   // SPI MOSI
+    #define TFT_SCLK 18   // SPI clock
+    #define TFT_CS   15   // Chip select
+    #define TFT_DC    2   // Data/Command (also RS or A0 on some modules)
+    #define TFT_RST   4   // Reset pin (-1 if tied to ESP32 reset)
+    #define TFT_MISO 19   // Optional — only needed for pixel readback
+    // #define TFT_BL  32  // Backlight control pin (optional)
+    ```
+  </Step>
+
+  <Step title="Set the SPI frequency">
+    The ILI9341 supports SPI clock speeds up to 80 MHz in theory, though module
+    quality and cable length often limit reliable operation to 40–60 MHz:
+
+    ```cpp User_Setup.h
+    #define SPI_FREQUENCY      40000000   // 40 MHz — safe for most modules
+    // #define SPI_FREQUENCY   80000000   // 80 MHz — try with short direct wires
+    #define SPI_READ_FREQUENCY 20000000   // 20 MHz for pixel readback
+    ```
+  </Step>
+</Steps>
+
+### Complete Configuration Examples
+
+<CodeGroup>
+  ```cpp User_Setup.h (Arduino IDE)
+  // ---- Driver selection -----------------------------------------------
+  #define ILI9341_DRIVER
+
+  // ---- Display dimensions ---------------------------------------------
+  #define TFT_WIDTH  240
+  #define TFT_HEIGHT 320
+
+  // ---- Pin definitions (ESP32 VSPI) -----------------------------------
+  #define TFT_MOSI 23
+  #define TFT_SCLK 18
+  #define TFT_CS   15
+  #define TFT_DC    2
+  #define TFT_RST   4
+  #define TFT_MISO 19
+
+  // ---- SPI clock frequencies ------------------------------------------
+  #define SPI_FREQUENCY      40000000
+  #define SPI_READ_FREQUENCY 20000000
+
+  // ---- Fonts (uncomment as needed) ------------------------------------
+  // #define LOAD_GLCD    // Font 1 — built-in 8 px font
+  // #define LOAD_FONT2   // Font 2 — small 16 px font
+  // #define LOAD_FONT4   // Font 4 — medium 26 px font
+  // #define LOAD_FONT6   // Font 6 — large 48 px numbers
+  // #define LOAD_FONT7   // Font 7 — 7-segment 48 px numbers
+  // #define LOAD_FONT8   // Font 8 — large 75 px numbers
+  // #define LOAD_GFXFF   // FreeFonts from Adafruit_GFX
+  // #define SMOOTH_FONT  // Enable smooth (anti-aliased) fonts
+  ```
+
+  ```ini platformio.ini (PlatformIO)
+  [env:esp32dev]
+  platform  = espressif32
+  board     = esp32dev
+  framework = arduino
+
+  lib_deps =
+    bodmer/TFT_eSPI @ ^2.5.0
+
+  build_flags =
+    -D ILI9341_DRIVER
+    -D TFT_WIDTH=240
+    -D TFT_HEIGHT=320
+    -D TFT_MOSI=23
+    -D TFT_SCLK=18
+    -D TFT_CS=15
+    -D TFT_DC=2
+    -D TFT_RST=4
+    -D TFT_MISO=19
+    -D SPI_FREQUENCY=40000000
+    -D SPI_READ_FREQUENCY=20000000
+    -D LOAD_GLCD
+    -D LOAD_FONT2
+    -D LOAD_FONT4
+    -D LOAD_GFXFF
+    -D SMOOTH_FONT
+  ```
+</CodeGroup>
+
+## DMA Support
+
+The ILI9341 fully supports DMA on ESP32, ESP32-S3, RP2040, and STM32Fxxx when operated over SPI. DMA allows large pixel transfers to proceed in the background while the CPU executes other code — a significant throughput advantage for animations and sprite rendering. No extra `User_Setup.h` flag is required; the library automatically uses DMA-capable transfer functions when called via `pushImageDMA()` or the sprite `pushSprite()` methods on supported platforms.
+
+## Basic Usage
+
+Once your `User_Setup.h` (or `platformio.ini`) is configured and saved, upload the following sketch to confirm your wiring:
+
+```cpp ILI9341 basic usage
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();  // Reads settings from User_Setup.h at compile time
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);          // 1 = landscape, 0 = portrait
+  tft.fillScreen(TFT_BLACK);
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextSize(2);
+  tft.drawString("ILI9341 Ready", 10, 10);
+}
+
+void loop() {
+  // Alternate between blue and red to confirm live drawing
+  tft.fillRect(0, 40, 320, 200, TFT_BLUE);
+  tft.drawString("Hello, TFT_eSPI!", 10, 120);
+  delay(500);
+  tft.fillRect(0, 40, 320, 200, TFT_RED);
+  delay(500);
+}
+```
+
+<Tip>
+  Call `tft.setSwapBytes(true)` if you are pushing raw 16-bit colour arrays
+  (e.g. from JPEG decode or PROGMEM image arrays) to ensure the byte order
+  matches the ILI9341's big-endian expectation.
+</Tip>
+
+## Datasheet Reference
+
+The full ILI9341 datasheet, including register maps, initialisation sequences, and electrical characteristics, is available at:
+
+```text
+https://www.displayfuture.com/Display/datasheet/controller/ILI9341.pdf
+```

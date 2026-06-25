@@ -1,0 +1,214 @@
+---
+title: "R61581 TFT Display: Configuration and Wiring Guide"
+sidebarTitle: "R61581"
+description: "Configure the RenesasSP R61581 262K-colour 320×480 TFT with TFT_eSPI — interface options, SPI/parallel wiring, User_Setup.h settings, and power notes."
+---
+
+The R61581 is a high-integration TFT controller produced by RenesasSP (now Renesas Electronics) targeting small to mid-sized portable devices such as mobile phones, tablets, and mobile TV equipment. It drives a-Si TFT panels up to 320 RGB × 480 dots with an internal frame memory and a built-in power supply circuit. If you need a taller 480-pixel panel without moving to a WVGA resolution chip, the R61581 is a solid choice with good library support in TFT_eSPI.
+
+## Controller Overview
+
+The R61581 is a 262,144-colour single-chip controller LSI with an internal frame memory sized for 320 RGB × 480 dots. It supports the MIPI DBI (Display Bus Interface) Type B parallel interface in 8, 9, 16, and 18-bit widths, as well as the 4-line Type C serial (SPI) interface. TFT_eSPI uses the standard parallel or SPI paths; MDDI (Mobile Display Digital Interface) is supported by the chip but not exercised by the library.
+
+The R61581 also supports the MIPI DPI video interface (VSYNC, HSYNC, PCLK, DE, DB[17:0]) for direct video output, making it versatile across different system architectures.
+
+### Key Specifications
+
+| Parameter             | Value                                              |
+| --------------------- | -------------------------------------------------- |
+| Resolution            | 320 RGB × 480 dots (maximum)                       |
+| Colour depth          | 262,144 (18-bit), also 8-colour idle mode          |
+| Internal frame memory | 345,600 bytes                                      |
+| Source driver lines   | 960                                                |
+| Gate driver lines     | 480                                                |
+| System interface      | MIPI DBI Type B (8/9/16/18-bit), Type C (SPI)      |
+| Video interface       | MIPI DPI, MDDI, TE/VSYNC synchronisation           |
+| Internal NVM          | 32 bits (user ID), 7 bits (VCOM), 5 bits (VDV)     |
+| NVM write endurance   | Up to 5 rewrites                                   |
+
+### Interface Options
+
+<Tabs>
+  <Tab title="SPI (Type C)">
+    The R61581 Type C interface maps to TFT_eSPI's standard 4-wire SPI path:
+
+    - **4-line, 9-bit (Option 1)** — SCLK, SDA, CS, and a 9th bit encodes D/C.
+    - **4-line, 8-bit (Option 3)** — SCLK, MOSI, CS, and a separate DC pin.
+
+    Option 3 (8-bit with a dedicated DC line) is the mode used by TFT_eSPI's SPI
+    driver, and its wiring is identical to the ILI9341.
+  </Tab>
+  <Tab title="Parallel (Type B)">
+    MIPI DBI Type B provides an 8, 9, 16, or 18-bit parallel MCU bus. TFT_eSPI
+    supports the **8-bit and 16-bit** parallel variants on capable processors
+    (RP2040, ESP32, STM32Fxxx). This path offers significantly higher pixel fill
+    rates than SPI.
+  </Tab>
+</Tabs>
+
+## Wiring
+
+### SPI Wiring (ESP32)
+
+The SPI wiring for the R61581 follows the same pattern as any other 4-wire SPI display in TFT_eSPI:
+
+| R61581 Module Pin | Signal       | ESP32 GPIO | Notes                           |
+| ----------------- | ------------ | ---------- | ------------------------------- |
+| VCC               | 3.3 V        | 3V3        |                                 |
+| GND               | Ground       | GND        |                                 |
+| CS                | Chip Select  | GPIO 15    | Active low; define as `TFT_CS`  |
+| RESET             | Reset        | GPIO 4     | Define as `TFT_RST`             |
+| DC / RS           | Data/Command | GPIO 2     | Define as `TFT_DC`              |
+| MOSI / SDA        | SPI Data     | GPIO 23    | VSPI MOSI                       |
+| SCLK              | SPI Clock    | GPIO 18    | VSPI SCLK                       |
+| LED / BL          | Backlight    | 3V3 or PWM |                                 |
+| MISO              | SPI Data Out | GPIO 19    | Optional; needed for readback   |
+
+### 8-bit Parallel Wiring (ESP32)
+
+For parallel mode you will need 8 data lines plus control signals. Connect the R61581's DB[7:0] bus to eight consecutive GPIO pins, then define `TFT_PARALLEL_8_BIT` and the individual data pins in `User_Setup.h`.
+
+<Note>
+  8-bit parallel mode is **not** available on the ESP8266 — there are
+  insufficient GPIO pins. Use SPI mode on that platform.
+</Note>
+
+## Configuration
+
+<Steps>
+  <Step title="Select the R61581 driver">
+    In `User_Setup.h`, uncomment the R61581 driver line and ensure no other
+    driver definition is active at the same time:
+
+    ```cpp User_Setup.h
+    #define R61581_DRIVER
+    ```
+  </Step>
+
+  <Step title="Set display dimensions">
+    The R61581 drives a portrait 320 × 480 panel:
+
+    ```cpp User_Setup.h
+    #define TFT_WIDTH  320
+    #define TFT_HEIGHT 480
+    ```
+  </Step>
+
+  <Step title="Define pin assignments (SPI example)">
+    ```cpp User_Setup.h
+    #define TFT_MOSI 23
+    #define TFT_SCLK 18
+    #define TFT_CS   15
+    #define TFT_DC    2
+    #define TFT_RST   4
+    #define TFT_MISO 19   // Optional
+    ```
+  </Step>
+
+  <Step title="Set SPI frequency">
+    Start conservatively, especially with longer wires or breadboard connections:
+
+    ```cpp User_Setup.h
+    #define SPI_FREQUENCY      27000000   // 27 MHz — conservative for long wires
+    // #define SPI_FREQUENCY   40000000   // 40 MHz — try with short direct connections
+    #define SPI_READ_FREQUENCY 20000000
+    ```
+  </Step>
+</Steps>
+
+### Complete User_Setup.h Example (ESP32 SPI)
+
+```cpp User_Setup.h
+// ---- Driver selection -----------------------------------------------
+#define R61581_DRIVER
+
+// ---- Display dimensions ---------------------------------------------
+#define TFT_WIDTH  320
+#define TFT_HEIGHT 480
+
+// ---- Pin definitions (ESP32 VSPI) -----------------------------------
+#define TFT_MOSI 23
+#define TFT_SCLK 18
+#define TFT_CS   15
+#define TFT_DC    2
+#define TFT_RST   4
+#define TFT_MISO 19
+
+// ---- SPI clock frequencies ------------------------------------------
+#define SPI_FREQUENCY      27000000
+#define SPI_READ_FREQUENCY 20000000
+
+// ---- Fonts (uncomment as needed) ------------------------------------
+// #define LOAD_GLCD
+// #define LOAD_FONT2
+// #define LOAD_FONT4
+// #define SMOOTH_FONT
+```
+
+## Power Supply Architecture
+
+The R61581 contains an internal step-up and voltage follower circuit that generates all drive voltages needed for the a-Si TFT panel from a single VCI supply input. This integrated supply simplifies board design — only VCI (the analog supply) and IOVCC (I/O logic supply) need to be provided externally.
+
+| Rail    | Function                       |
+| ------- | ------------------------------ |
+| DDVDH   | Source driver / VCOM supply    |
+| VREG    | Reference voltage              |
+| VCL     | Negative LCD drive             |
+| VGH     | Gate-on drive voltage          |
+| VGL     | Gate-off drive voltage         |
+| VCOMH/L | VCOM drive (common electrode)  |
+
+## Dynamic Backlight Control
+
+A notable feature of the R61581 is its built-in **dynamic backlight control** function, which adjusts backlight brightness based on image content. This reduces power consumption at the backlight with minimal perceptible impact on display quality. On most modules this is accessible via a PWM-capable backlight pin connected to the driver IC.
+
+## Power-Saving Modes
+
+The R61581 provides three hardware power-saving modes you can invoke through the library or direct command writes:
+
+| Mode           | Description                                                         |
+| -------------- | ------------------------------------------------------------------- |
+| Deep Standby   | Lowest power state — display output off, internal circuits down     |
+| Sleep Mode     | Controller halted, GRAM retained; fast resume to active mode        |
+| 8-Color Idle   | Reduced colour depth (8 colours) to cut power while staying visible |
+
+## Basic Usage
+
+```cpp R61581 basic usage
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(0);          // Portrait: 320 wide × 480 tall
+  tft.fillScreen(TFT_BLACK);
+
+  tft.setTextColor(TFT_GREEN, TFT_BLACK);
+  tft.setTextFont(4);
+  tft.drawString("R61581 Ready", 20, 20);
+}
+
+void loop() {
+  tft.fillScreen(TFT_NAVY);
+  tft.drawRect(10, 10, 300, 460, TFT_WHITE);
+  tft.drawCentreString("320 x 480", 160, 230, 4);
+  delay(1000);
+}
+```
+
+<Note>
+  The MDDI interface supported by the R61581 is designed and produced under
+  licensing from Qualcomm and must be adopted only in modules that incorporate
+  a Qualcomm CDMA ASIC. TFT_eSPI does not use the MDDI path — it uses the
+  standard DBI or SPI interface — so this licensing requirement does not apply
+  to typical TFT_eSPI projects.
+</Note>
+
+## Datasheet Reference
+
+The R61581 Technical Reference Manual is available at:
+
+```text
+https://forums.jaspp.org.uk/release/Reference/Tontec_R61581/Tontec R61581 TRM rev. 1.20.pdf
+```

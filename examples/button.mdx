@@ -1,0 +1,241 @@
+---
+title: "Interactive TFT Buttons Using TFT_eSPI_Button Class"
+sidebarTitle: "Button Example"
+description: "Build touch-enabled buttons with TFT_eSPI_Button: use initButton, drawButton, getTouch, contains, press, justPressed, and justReleased for responsive UIs."
+---
+
+The `TFT_eSPI_Button` class provides a ready-made widget for creating labeled, touch-enabled buttons on TFT displays. It handles button rendering, hit-testing, and debounced press state tracking — making it straightforward to build interactive UIs without writing low-level touch logic yourself. You define a button's position, size, colours, and label once, and the class does the rest.
+
+<Note>
+  All button examples on this page require `TOUCH_CS` to be defined in
+  `User_Setup.h` and a resistive touchscreen (XPT2046 controller) connected to
+  your board. Without a touch controller, `tft.getTouch()` will always return
+  `false`.
+</Note>
+
+## Basic Button Example
+
+The following sketch creates a single red button labeled "Click" and uses the built-in XPT2046 touch controller to detect presses:
+
+```cpp button_basic.ino
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI        tft = TFT_eSPI();  // TFT instance
+TFT_eSPI_Button btn;               // Button instance
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // initButton(&tft, cx, cy, w, h, outline, fill, textcolor, label, textsize)
+  btn.initButton(&tft, 120, 100, 100, 40,
+                 TFT_WHITE, TFT_RED, TFT_WHITE, "Click", 2);
+  btn.drawButton();
+}
+
+void loop() {
+  uint16_t x = 0, y = 0;
+
+  if (tft.getTouch(&x, &y)) {
+    if (btn.contains(x, y)) {
+      tft.fillScreen(TFT_GREEN);
+      delay(500);
+      tft.fillScreen(TFT_BLACK);
+      btn.drawButton();
+    }
+  }
+
+  delay(50);  // Simple debounce delay
+}
+```
+
+## How It Works
+
+<Steps>
+  <Step title="Create a button instance">
+    Declare a `TFT_eSPI_Button` object at global scope. It holds position, size,
+    colours, and press state internally, so it must persist between `setup()` and
+    `loop()` calls.
+
+    ```cpp
+    TFT_eSPI_Button btn;
+    ```
+  </Step>
+
+  <Step title="Initialize with initButton()">
+    Call `initButton()` to configure the button's centre position, dimensions,
+    colours, and label text. This does **not** draw anything yet — it only stores
+    the parameters.
+
+    ```cpp
+    // Centre-based: x/y is the centre of the button
+    btn.initButton(&tft, cx, cy, width, height,
+                   outline_color, fill_color, text_color,
+                   "Label", text_size);
+
+    // Upper-left-based: x1/y1 is the top-left corner
+    btn.initButtonUL(&tft, x1, y1, width, height,
+                     outline_color, fill_color, text_color,
+                     "Label", text_size);
+    ```
+
+    The `&tft` pointer tells the button which display object to draw onto —
+    useful when you have multiple displays or pass buttons between functions.
+  </Step>
+
+  <Step title="Draw the button">
+    Call `drawButton()` to render the button on screen. Pass `true` for an
+    inverted (pressed) appearance — this swaps the fill and text colours to give
+    a visual press feedback effect:
+
+    ```cpp
+    btn.drawButton();        // Normal appearance
+    btn.drawButton(true);    // Inverted — visual press feedback
+    ```
+  </Step>
+
+  <Step title="Poll touch and check contains()">
+    In `loop()`, read touch coordinates with `tft.getTouch()` and pass them to
+    `btn.contains()` to detect whether the button area was hit:
+
+    ```cpp
+    uint16_t tx, ty;
+    if (tft.getTouch(&tx, &ty)) {
+      if (btn.contains(tx, ty)) {
+        // Button was touched — take action here
+      }
+    }
+    ```
+
+    `contains()` performs a simple bounding-box check against the button's
+    position and size.
+  </Step>
+</Steps>
+
+## Press State Tracking
+
+For more responsive UIs with visual feedback, use the `press()` / `justPressed()` / `justReleased()` pattern. This approach correctly handles the transition from released to pressed and back, letting you trigger actions exactly once per tap:
+
+```cpp button_state.ino
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI        tft = TFT_eSPI();
+TFT_eSPI_Button btn;
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  btn.initButton(&tft, 120, 100, 120, 50,
+                 TFT_WHITE, TFT_BLUE, TFT_WHITE, "Press Me", 2);
+  btn.drawButton(false);
+}
+
+void loop() {
+  uint16_t tx = 0, ty = 0;
+  bool touched = tft.getTouch(&tx, &ty);
+
+  // Tell the button its current pressed state
+  btn.press(touched && btn.contains(tx, ty));
+
+  if (btn.justPressed()) {
+    btn.drawButton(true);  // Draw inverted to confirm the press visually
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.drawString("Pressed!", 10, 150, 2);
+  }
+
+  if (btn.justReleased()) {
+    btn.drawButton(false);                      // Restore normal appearance
+    tft.fillRect(10, 145, 200, 20, TFT_BLACK);  // Clear status text
+  }
+
+  delay(20);
+}
+```
+
+### State Methods
+
+| Method            | Returns | Description                                                 |
+| ----------------- | ------- | ----------------------------------------------------------- |
+| `press(bool p)`   | void    | Call each loop with the current press state                 |
+| `isPressed()`     | bool    | `true` if the button is currently pressed                   |
+| `justPressed()`   | bool    | `true` only on the transition from released → pressed       |
+| `justReleased()`  | bool    | `true` only on the transition from pressed → released       |
+
+<Tip>
+  Always call `btn.press(...)` once per loop iteration **before** checking
+  `justPressed()` or `justReleased()`. These edge-detection methods compare the
+  current state to the previous state, which `press()` updates. Calling them
+  without a prior `press()` update will always return `false`.
+</Tip>
+
+## Multi-Button Example
+
+You can manage multiple buttons by storing them in an array and iterating over them each loop. The sketch below creates three coloured buttons — "Red", "Green", and "Blue" — and fills the screen with the corresponding colour when each is tapped:
+
+```cpp multi_button.ino
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI        tft     = TFT_eSPI();
+TFT_eSPI_Button buttons[3];
+
+const char* labels[] = { "Red",     "Green",       "Blue"      };
+uint16_t    fills[]  = { TFT_RED,   TFT_GREEN,     TFT_BLUE    };
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  for (int i = 0; i < 3; i++) {
+    buttons[i].initButton(&tft,
+      60 + i * 80, 120,     // cx, cy — spaced 80 px apart
+      70, 40,               // width, height
+      TFT_WHITE, fills[i], TFT_WHITE,
+      (char*)labels[i], 2
+    );
+    buttons[i].drawButton();
+  }
+}
+
+void loop() {
+  uint16_t tx = 0, ty = 0;
+  bool touched = tft.getTouch(&tx, &ty);
+
+  for (int i = 0; i < 3; i++) {
+    buttons[i].press(touched && buttons[i].contains(tx, ty));
+
+    if (buttons[i].justPressed()) {
+      tft.fillScreen(fills[i]);
+      // Redraw all buttons after clearing the screen
+      for (int j = 0; j < 3; j++) buttons[j].drawButton();
+    }
+  }
+
+  delay(20);
+}
+```
+
+<Note>
+  After calling `tft.fillScreen()` you must redraw every button manually —
+  `fillScreen` overwrites the entire framebuffer, including any previously
+  rendered buttons.
+</Note>
+
+## initButton() Parameter Reference
+
+| Parameter      | Type       | Description                                                      |
+| -------------- | ---------- | ---------------------------------------------------------------- |
+| `gfx`          | `TFT_eSPI*`| Pointer to the TFT display object                                |
+| `x` / `y`      | `int16_t`  | Centre coordinates (or top-left for `initButtonUL`)              |
+| `w` / `h`      | `uint16_t` | Button width and height in pixels                                |
+| `outline`      | `uint16_t` | Border colour (RGB565)                                           |
+| `fill`         | `uint16_t` | Background fill colour (RGB565)                                  |
+| `textcolor`    | `uint16_t` | Label text colour (RGB565)                                       |
+| `label`        | `char*`    | Null-terminated label string                                     |
+| `textsize`     | `uint8_t`  | Integer text size multiplier (1 = native size)                   |

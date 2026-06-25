@@ -1,0 +1,373 @@
+---
+title: "Anti-Aliased Graphics and Smooth Drawing in TFT_eSPI"
+sidebarTitle: "Anti-Aliased"
+description: "Render smooth arcs, wide lines, wedge lines, spots, circles, and rounded rectangles with pixel-perfect alpha blending using TFT_eSPI's smooth drawing API."
+---
+
+TFT_eSPI includes a family of anti-aliased ("smooth") drawing primitives that blend shape edges against a background color instead of painting hard pixel borders. On small, high-pixel-density panels — where one aliased step equals a visible staircase — the difference is immediately apparent. Every smooth function accepts a `bg_color` parameter that controls what color edge pixels are blended toward. When you omit `bg_color` (or pass the sentinel `0x00FFFFFF`), the library reads the actual background pixel directly from the display. Passing an explicit background color skips that read and is always faster.
+
+<Note>
+Anti-aliased drawing is more CPU-intensive than plain drawing. It is an excellent trade-off for small decorative elements such as gauge needles, dial rings, progress arcs, and indicator spots. For full-screen animation, prefer the non-smooth variants.
+</Note>
+
+---
+
+## The `bg_color` Sentinel
+
+The default value `0x00FFFFFF` acts as a sentinel meaning **"read the background from the display"**. Any other 24-bit value is treated as an explicit background color and skips the pixel read.
+
+```cpp bgColor.ino
+// Let the library read the display background automatically (slower)
+tft.drawSpot(60.0, 60.0, 8.0, TFT_RED);
+
+// Provide an explicit background to skip the read (faster)
+tft.drawSpot(60.0, 60.0, 8.0, TFT_RED, TFT_BLACK);
+```
+
+<Tip>
+Always pass an explicit `bg_color` in performance-sensitive code. Reading pixels back over SPI is slow, and on some display controllers it is not even supported.
+</Tip>
+
+---
+
+## Spots — Anti-Aliased Filled Circles
+
+### `drawSpot`
+
+`drawSpot` draws a small anti-aliased filled circle at a sub-pixel floating-point position. It uses `drawWideLine` internally with zero length, so it inherits naturally rounded edges. It is designed for indicator dots, tick marks, and data-point markers — not for large circles.
+
+```cpp
+void drawSpot(float ax, float ay, float r,
+              uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF);
+```
+
+<ParamField path="ax" type="float" required>
+  Sub-pixel X coordinate of the center.
+</ParamField>
+<ParamField path="ay" type="float" required>
+  Sub-pixel Y coordinate of the center.
+</ParamField>
+<ParamField path="r" type="float" required>
+  Radius in pixels (floating-point for sub-pixel precision).
+</ParamField>
+<ParamField path="fg_color" type="uint32_t" required>
+  Fill color.
+</ParamField>
+<ParamField path="bg_color" type="uint32_t">
+  Background blend color. Defaults to `0x00FFFFFF` (read from display).
+</ParamField>
+
+<Warning>
+`drawSpot` is maths-intensive. Use it for small radii and infrequent draws. For large filled circles, use `fillSmoothCircle` instead.
+</Warning>
+
+```cpp drawSpot.ino
+// Five indicator dots evenly spaced along a horizontal row
+for (int i = 0; i < 5; i++) {
+  tft.drawSpot(20.0f + i * 40.0f, 60.0f, 6.0f, TFT_CYAN, TFT_BLACK);
+}
+```
+
+---
+
+## Wide and Wedge Lines
+
+### `drawWideLine`
+
+`drawWideLine` draws an anti-aliased line with a constant width `wd` along its entire length. Both endpoints are rounded caps, giving the line a "pill" shape.
+
+```cpp
+void drawWideLine(float ax, float ay, float bx, float by,
+                  float wd,
+                  uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF);
+```
+
+<ParamField path="ax, ay" type="float" required>Start point (sub-pixel precision).</ParamField>
+<ParamField path="bx, by" type="float" required>End point (sub-pixel precision).</ParamField>
+<ParamField path="wd" type="float" required>Line width in pixels.</ParamField>
+<ParamField path="fg_color" type="uint32_t" required>Line color.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background blend color. Defaults to `0x00FFFFFF`.</ParamField>
+
+```cpp drawWideLine.ino
+// 4-pixel-wide anti-aliased diagonal line
+tft.drawWideLine(10.0f, 10.0f, 200.0f, 150.0f, 4.0f, TFT_WHITE, TFT_BLACK);
+```
+
+---
+
+### `drawWedgeLine`
+
+`drawWedgeLine` draws an anti-aliased line that tapers between two widths. The half-width at the start is `aw` and at the end is `bw`. Setting `bw` to `1.0` and `aw` to a larger value produces a gauge needle or arrow shape.
+
+```cpp
+void drawWedgeLine(float ax, float ay, float bx, float by,
+                   float aw, float bw,
+                   uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF);
+```
+
+<ParamField path="ax, ay" type="float" required>Start point.</ParamField>
+<ParamField path="bx, by" type="float" required>End point.</ParamField>
+<ParamField path="aw" type="float" required>Half-width (radius) at the start point.</ParamField>
+<ParamField path="bw" type="float" required>Half-width (radius) at the end point.</ParamField>
+<ParamField path="fg_color" type="uint32_t" required>Line color.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background blend color. Defaults to `0x00FFFFFF`.</ParamField>
+
+```cpp drawWedgeLine.ino
+// Tapered needle: 4 px wide at the pivot, 1 px at the tip
+tft.drawWedgeLine(120.0f, 120.0f,  // base (pivot)
+                  120.0f,  30.0f,  // tip
+                  4.0f, 1.0f,
+                  TFT_RED, TFT_BLACK);
+
+// Arrow: wide at start (8 px), narrow at end (1 px)
+tft.drawWedgeLine(20.0f, 120.0f, 180.0f, 120.0f,
+                  8.0f, 1.0f,
+                  TFT_MAGENTA, TFT_BLACK);
+```
+
+---
+
+## Arcs
+
+### `drawSmoothArc`
+
+`drawSmoothArc` draws an anti-aliased arc segment defined by an outer radius `r` and inner radius `ir`. The arc thickness equals `r - ir + 1`. Arc ends are also anti-aliased, and you can optionally add rounded end caps.
+
+Angle `0°` is at the 6 o'clock position and increases clockwise: `90°` = 9 o'clock, `180°` = 12 o'clock, `270°` = 3 o'clock. The arc always draws clockwise from `startAngle` to `endAngle`; the start may be numerically larger than the end to wrap around.
+
+```cpp
+void drawSmoothArc(int32_t x,    int32_t y,
+                   int32_t r,    int32_t ir,
+                   uint32_t startAngle, uint32_t endAngle,
+                   uint32_t fg_color,   uint32_t bg_color,
+                   bool roundEnds = false);
+```
+
+<ParamField path="x, y" type="int32_t" required>Center coordinates of the arc.</ParamField>
+<ParamField path="r" type="int32_t" required>Outer radius in pixels.</ParamField>
+<ParamField path="ir" type="int32_t" required>Inner radius in pixels. Arc thickness = `r - ir + 1`.</ParamField>
+<ParamField path="startAngle" type="uint32_t" required>Start angle in degrees (0–360). `0°` = 6 o'clock.</ParamField>
+<ParamField path="endAngle" type="uint32_t" required>End angle in degrees (0–360). Arc draws clockwise from start to end.</ParamField>
+<ParamField path="fg_color" type="uint32_t" required>Arc foreground color, anti-aliased against `bg_color` at the edges.</ParamField>
+<ParamField path="bg_color" type="uint32_t" required>Background blend color.</ParamField>
+<ParamField path="roundEnds" type="bool">Add rounded end caps when `true`. Defaults to `false`.</ParamField>
+
+```cpp drawSmoothArc.ino
+// Three-quarter arc with rounded end caps
+tft.drawSmoothArc(160, 120, 80, 65,
+                  0, 270,
+                  TFT_CYAN, TFT_BLACK,
+                  true);
+```
+
+---
+
+### `drawArc`
+
+`drawArc` is identical to `drawSmoothArc` except the **arc ends are not anti-aliased**, which keeps joints clean when you draw adjacent arc segments. Side anti-aliasing is still applied by default and can be disabled.
+
+```cpp
+void drawArc(int32_t x,    int32_t y,
+             int32_t r,    int32_t ir,
+             uint32_t startAngle, uint32_t endAngle,
+             uint32_t fg_color,   uint32_t bg_color,
+             bool smoothArc = true);
+```
+
+<ParamField path="smoothArc" type="bool">
+  When `true` (default), sides are anti-aliased. Set to `false` to disable all anti-aliasing for crisp segmented joins.
+</ParamField>
+
+```cpp drawArc.ino
+// Segmented color ring — no AA on ends so segments join cleanly
+tft.drawArc(160, 120, 80, 60,   0,  90, TFT_RED,    TFT_BLACK, false);
+tft.drawArc(160, 120, 80, 60,  90, 180, TFT_YELLOW, TFT_BLACK, false);
+tft.drawArc(160, 120, 80, 60, 180, 270, TFT_GREEN,  TFT_BLACK, false);
+tft.drawArc(160, 120, 80, 60, 270, 360, TFT_BLUE,   TFT_BLACK, false);
+```
+
+---
+
+## Smooth Circles
+
+### `drawSmoothCircle`
+
+`drawSmoothCircle` draws an anti-aliased circle outline. The line is rendered 3 pixels wide — inner AA zone at `r - 1`, solid ring at `r`, outer AA zone at `r + 1` — to reduce the "braiding" artifact that appears with 1-pixel anti-aliased circles.
+
+```cpp
+void drawSmoothCircle(int32_t x, int32_t y, int32_t r,
+                      uint32_t fg_color, uint32_t bg_color);
+```
+
+<ParamField path="x, y" type="int32_t" required>Center coordinates.</ParamField>
+<ParamField path="r" type="int32_t" required>Radius in pixels.</ParamField>
+<ParamField path="fg_color" type="uint32_t" required>Circle outline color.</ParamField>
+<ParamField path="bg_color" type="uint32_t" required>Background blend color. No sentinel default — you must provide a value.</ParamField>
+
+```cpp drawSmoothCircle.ino
+tft.drawSmoothCircle(120, 120, 50, TFT_WHITE, TFT_BLACK);
+```
+
+---
+
+### `fillSmoothCircle`
+
+`fillSmoothCircle` draws a filled circle with anti-aliased edges. It is the recommended choice for any large filled circle that needs smooth rendering.
+
+```cpp
+void fillSmoothCircle(int32_t x, int32_t y, int32_t r,
+                      uint32_t color, uint32_t bg_color = 0x00FFFFFF);
+```
+
+<ParamField path="x, y" type="int32_t" required>Center coordinates.</ParamField>
+<ParamField path="r" type="int32_t" required>Radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t" required>Fill color.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background blend color. Defaults to `0x00FFFFFF` (read from display).</ParamField>
+
+```cpp fillSmoothCircle.ino
+tft.fillSmoothCircle(120, 120, 50, TFT_CYAN, TFT_BLACK);
+```
+
+---
+
+## Smooth Rounded Rectangles
+
+### `drawSmoothRoundRect`
+
+Draw an anti-aliased rounded rectangle outline. The arc thickness at each corner equals `r - ir + 1`. A `quadrants` bitmask lets you render only selected corners — useful for building composite UI elements.
+
+```cpp
+void drawSmoothRoundRect(int32_t x, int32_t y,
+                         int32_t r,  int32_t ir,
+                         int32_t w,  int32_t h,
+                         uint32_t fg_color,
+                         uint32_t bg_color = 0x00FFFFFF,
+                         uint8_t  quadrants = 0xF);
+```
+
+<ParamField path="x, y" type="int32_t" required>Top-left corner of the bounding box.</ParamField>
+<ParamField path="r" type="int32_t" required>Outer corner radius.</ParamField>
+<ParamField path="ir" type="int32_t" required>Inner corner radius. When `w` and `h` are both `0`, a full circle is drawn.</ParamField>
+<ParamField path="w, h" type="int32_t" required>Bounding box width and height.</ParamField>
+<ParamField path="fg_color" type="uint32_t" required>Outline color.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background blend color. Defaults to `0x00FFFFFF`.</ParamField>
+<ParamField path="quadrants" type="uint8_t">
+  Bitmask selecting which corners to draw (default `0xF` = all four).
+
+  |            | Left | Right |
+  |------------|------|-------|
+  | **Top**    | 0x1  | 0x2   |
+  | **Bottom** | 0x8  | 0x4   |
+</ParamField>
+
+```cpp drawSmoothRoundRect.ino
+tft.drawSmoothRoundRect(10, 10, 12, 8, 100, 60, TFT_WHITE, TFT_BLACK);
+```
+
+---
+
+### `fillSmoothRoundRect`
+
+Draw an anti-aliased filled rounded rectangle. Edge pixels are blended against `bg_color` for smooth corners.
+
+```cpp
+void fillSmoothRoundRect(int32_t x, int32_t y,
+                         int32_t w, int32_t h,
+                         int32_t radius,
+                         uint32_t color,
+                         uint32_t bg_color = 0x00FFFFFF);
+```
+
+<ParamField path="x, y" type="int32_t" required>Top-left corner.</ParamField>
+<ParamField path="w, h" type="int32_t" required>Width and height.</ParamField>
+<ParamField path="radius" type="int32_t" required>Corner radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t" required>Fill color.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background blend color. Defaults to `0x00FFFFFF`.</ParamField>
+
+```cpp fillSmoothRoundRect.ino
+tft.fillSmoothRoundRect(10, 80, 100, 60, 12, TFT_NAVY, TFT_BLACK);
+```
+
+---
+
+## Practical Example — Animated Gauge
+
+The sketch below builds a complete gauge face: a grey background track, a colored value arc, and a tapered needle, all using smooth drawing primitives.
+
+```cpp gauge.ino
+#include <TFT_eSPI.h>
+#include <math.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+const int CX = 160;   // Gauge center X
+const int CY = 120;   // Gauge center Y
+
+void drawGauge(int value) {
+  const int outerR = 90;
+  const int innerR = 70;
+
+  // ── Background track (full 360° ring, dark grey) ───────────────────────
+  tft.drawSmoothArc(CX, CY, outerR, innerR,
+                    0, 360,
+                    0x4208,        // dark grey
+                    TFT_BLACK);
+
+  // ── Value arc — color shifts green → yellow → red ──────────────────────
+  uint32_t sweep = map(value, 0, 100, 0, 360);
+  uint32_t arcColor = (value < 33) ? TFT_GREEN
+                    : (value < 66) ? TFT_YELLOW
+                                   : TFT_RED;
+
+  if (sweep > 0) {
+    tft.drawSmoothArc(CX, CY, outerR, innerR,
+                      0, sweep,
+                      arcColor,
+                      TFT_BLACK);
+  }
+
+  // ── Needle ─────────────────────────────────────────────────────────────
+  // Angle 0° = 6 o'clock; shift by -90° to start at 12 o'clock
+  float angleDeg = (float)sweep - 90.0f;
+  float angleRad = angleDeg * (float)M_PI / 180.0f;
+  float tipX = CX + 55.0f * cosf(angleRad);
+  float tipY = CY + 55.0f * sinf(angleRad);
+
+  tft.drawWedgeLine((float)CX, (float)CY, tipX, tipY,
+                    5.0f, 1.0f,
+                    TFT_WHITE, TFT_BLACK);
+
+  // Center hub
+  tft.fillSmoothCircle(CX, CY, 7, TFT_WHITE, TFT_BLACK);
+
+  // ── Numeric label ───────────────────────────────────────────────────────
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextPadding(tft.textWidth("100", 4));
+  tft.drawNumber(value, CX, CY + 42, 4);
+}
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Smooth bezel ring
+  tft.drawSmoothCircle(CX, CY, 95, 0x7BEF, TFT_BLACK);
+
+  // Smooth label bar at the bottom
+  tft.fillSmoothRoundRect(120, 205, 80, 24, 8, 0x2104, TFT_BLACK);
+
+  // Animate 0 → 80
+  for (int v = 0; v <= 80; v += 2) {
+    drawGauge(v);
+    delay(40);
+  }
+}
+
+void loop() {}
+```
+
+<Note>
+When animating a gauge needle, draw the needle in `bg_color` (here `TFT_BLACK`) on the previous frame before drawing it in `fg_color` on the new frame. This erases the old position without a full `fillScreen` repaint.
+</Note>

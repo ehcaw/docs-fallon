@@ -1,0 +1,209 @@
+---
+title: "TFT_eSPI Text Datum: Aligning Text with setTextDatum"
+sidebarTitle: "Text Datum"
+description: "Control text anchor points in TFT_eSPI using setTextDatum. Center, right-align, or baseline-align text with 12 datum constants and drawString examples."
+---
+
+The text datum in TFT_eSPI defines the anchor point used when positioning text with `drawString()`, `drawNumber()`, and `drawFloat()`. By default, text is anchored at its **top-left corner** (`TL_DATUM`), but changing the datum lets you center text on screen, right-align values against a fixed edge, or align to a typographic baseline — all without manually calculating pixel offsets.
+
+## Datum Constants
+
+There are 12 datum values, addressing corners, edges, centre, and typographic baselines:
+
+| Constant     | Value | Aliases      | Description                              |
+| ------------ | :---: | ------------ | ---------------------------------------- |
+| `TL_DATUM`   | 0     | —            | Top-left (default)                       |
+| `TC_DATUM`   | 1     | —            | Top-centre                               |
+| `TR_DATUM`   | 2     | —            | Top-right                                |
+| `ML_DATUM`   | 3     | `CL_DATUM`   | Middle-left / Centre-left                |
+| `MC_DATUM`   | 4     | `CC_DATUM`   | Middle-centre / Centre-centre            |
+| `MR_DATUM`   | 5     | `CR_DATUM`   | Middle-right / Centre-right              |
+| `BL_DATUM`   | 6     | —            | Bottom-left                              |
+| `BC_DATUM`   | 7     | —            | Bottom-centre                            |
+| `BR_DATUM`   | 8     | —            | Bottom-right                             |
+| `L_BASELINE` | 9     | —            | Left — on the typographic baseline       |
+| `C_BASELINE` | 10    | —            | Centre — on the typographic baseline     |
+| `R_BASELINE` | 11    | —            | Right — on the typographic baseline      |
+
+The **baseline** is the horizontal line that most characters sit on — the bottom of a capital "A", for example. Descenders like "g" and "y" drop below it.
+
+## Datum Positions Illustrated
+
+The diagram below shows where each anchor point lands relative to the text bounding box. The coordinate you pass to `drawString()` maps to the labelled position:
+
+```text
+(0,0) ─────── TL ─── TC ─── TR ────── (w,0)
+               │             │
+               ML ─── MC ─── MR
+               │             │
+               BL ─── BC ─── BR
+(0,h) ──────────────────────────────── (w,h)
+```
+
+For example, with `MC_DATUM` the coordinate you supply becomes the exact centre of the text bounding box. With `TR_DATUM` the coordinate marks the top-right corner, so text extends leftward and downward from that point.
+
+## Basic Usage
+
+```cpp basic_datum.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.begin();
+  tft.setRotation(1);  // Landscape
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  // Center text on screen using MC_DATUM
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("Hello, World!", tft.width() / 2, tft.height() / 2, 2);
+}
+
+void loop() {}
+```
+
+With `MC_DATUM`, the coordinate passed to `drawString()` becomes the **centre** of the text bounding box — ideal for centering on screen without any manual calculation.
+
+## Changing and Reading the Datum
+
+You can change the datum at any time, and read it back with `getTextDatum()`:
+
+```cpp read_datum.ino
+// Set datum to top-right
+tft.setTextDatum(TR_DATUM);
+
+// Read the current datum value
+uint8_t d = tft.getTextDatum();
+Serial.print("Current datum: ");
+Serial.println(d);  // prints 2
+
+// Right-align a score label against the screen's right edge
+tft.drawString("Score: 99", tft.width(), 10, 2);
+
+// Restore default for the rest of the sketch
+tft.setTextDatum(TL_DATUM);
+tft.drawString("Top left corner!", 0, 0, 2);
+```
+
+## Centering and Aligning Text on Screen
+
+The snippet below demonstrates the three most common alignment patterns in a single sketch:
+
+```cpp alignment.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.begin();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  int cx = tft.width()  / 2;
+  int cy = tft.height() / 2;
+
+  // Perfectly centred — no offset arithmetic needed
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("Centred", cx, cy, 4);
+
+  // Right-aligned at the screen's right edge
+  tft.setTextDatum(TR_DATUM);
+  tft.drawString("Right edge", tft.width(), 10, 2);
+
+  // Bottom-left corner
+  tft.setTextDatum(BL_DATUM);
+  tft.drawString("Bottom left", 0, tft.height(), 2);
+}
+
+void loop() {}
+```
+
+<Tip>
+  `MC_DATUM` combined with `tft.width()/2` and `tft.height()/2` is the most
+  reliable way to perfectly centre a label on screen, regardless of display
+  size or rotation. Use it any time your text must be visually centred on the
+  panel.
+</Tip>
+
+## Drawing All Datums to Visualize Alignment
+
+The following sketch renders a labelled string at every datum position so you can see exactly where each anchor point lands on your hardware:
+
+```cpp all_datums.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+// Datum constants and their display labels
+const uint8_t datums[]    = { TL_DATUM, TC_DATUM, TR_DATUM,
+                               ML_DATUM, MC_DATUM, MR_DATUM,
+                               BL_DATUM, BC_DATUM, BR_DATUM };
+const char*   names[]     = { "TL", "TC", "TR",
+                               "ML", "MC", "MR",
+                               "BL", "BC", "BR" };
+
+void setup() {
+  tft.begin();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  int w  = tft.width();
+  int h  = tft.height();
+  int cx = w / 2;
+  int cy = h / 2;
+
+  // Anchor positions for each datum (mirrors the 3×3 grid)
+  int xs[] = { 0,  cx, w,   0,  cx, w,   0,  cx, w  };
+  int ys[] = { 0,  0,  0,   cy, cy, cy,  h,  h,  h  };
+
+  // Draw crosshair reference lines
+  tft.drawFastHLine(0, cy, w, TFT_DARKGREY);
+  tft.drawFastVLine(cx, 0, h, TFT_DARKGREY);
+
+  // Draw each datum label at its anchor point
+  for (int i = 0; i < 9; i++) {
+    tft.setTextDatum(datums[i]);
+    tft.drawString(names[i], xs[i], ys[i], 2);
+  }
+
+  // Mark each anchor with a small dot so the alignment is obvious
+  for (int i = 0; i < 9; i++) {
+    tft.fillCircle(xs[i], ys[i], 2, TFT_RED);
+  }
+}
+
+void loop() {}
+```
+
+Upload this sketch and you will see nine labels, each anchored exactly at its named position relative to the crosshair lines. The red dot marks where the coordinate lands — the text hangs off it according to the datum rule.
+
+## Datum with Numbers and Floats
+
+The datum also applies to `drawNumber()` and `drawFloat()`. This is particularly useful for right-aligning sensor readings against a fixed column:
+
+```cpp sensor_value.ino
+// Right-align a changing sensor value at a fixed x column
+tft.setTextDatum(MR_DATUM);
+tft.setTextColor(TFT_GREEN, TFT_BLACK);
+tft.setTextPadding(60);  // Clear previous value within a 60-pixel-wide window
+
+float temperature = 23.4;
+tft.drawFloat(temperature, 1, 230, 60, 2);  // Renders "23.4" right-aligned at x=230
+```
+
+`setTextPadding(pixels)` tells the library to clear a fixed-width area before drawing, which prevents leftover digits from earlier, wider values from ghosting on screen.
+
+## API Reference
+
+| Function                            | Description                                              |
+| ----------------------------------- | -------------------------------------------------------- |
+| `setTextDatum(uint8_t d)`           | Set the datum anchor point for subsequent draw calls     |
+| `getTextDatum()` → `uint8_t`        | Read the current datum value                             |
+| `drawString(str, x, y, font)`       | Draw a string at `(x, y)` using the current datum        |
+| `drawCentreString(str, x, y, font)` | Draw centred (forces `TC_DATUM` internally)              |
+| `drawRightString(str, x, y, font)`  | Draw right-aligned (forces `TR_DATUM` internally)        |
+| `drawNumber(n, x, y, font)`         | Draw an integer using the current datum                  |
+| `drawFloat(val, dp, x, y, font)`    | Draw a float with `dp` decimal places using current datum|

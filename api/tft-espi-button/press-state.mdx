@@ -1,0 +1,167 @@
+---
+title: "TFT_eSPI_Button: Press, isPressed, and contains() API"
+sidebarTitle: "Press State"
+description: "Use TFT_eSPI_Button's contains(), press(), isPressed(), justPressed(), and justReleased() for reliable touch hit-testing and edge-triggered state changes."
+---
+
+Once a button is on screen you need two capabilities: a way to determine whether a touch coordinate landed inside the button, and a way to track when the button transitions between the pressed and released states. `TFT_eSPI_Button` bundles both. The `contains()` method performs a simple bounding-rectangle hit test. The `press()` / `isPressed()` / `justPressed()` / `justReleased()` group maintains a two-frame state machine — current state and previous state — so you can detect the exact loop iteration on which the button was first touched or first released, without any external debounce flags or timer logic.
+
+## `contains()`
+
+Returns `true` when the point `(x, y)` lies inside the button's bounding rectangle.
+
+```cpp
+bool TFT_eSPI_Button::contains(int16_t x, int16_t y);
+```
+
+<ParamField path="x" type="int16_t">
+  Horizontal coordinate of the point to test, in screen pixels — typically the x value returned by `tft.getTouch()`.
+</ParamField>
+
+<ParamField path="y" type="int16_t">
+  Vertical coordinate of the point to test, in screen pixels.
+</ParamField>
+
+**Returns** `bool` — `true` if both `x` and `y` fall within the button rectangle; `false` otherwise.
+
+---
+
+## `press()`
+
+Feeds the current touch state into the button's internal state machine. Call this every iteration of `loop()` with `true` when the button is being touched and `false` when it is not. Internally, the previous state is shifted into a history slot before the new state is recorded, enabling `justPressed()` and `justReleased()` to compare the two frames.
+
+```cpp
+void TFT_eSPI_Button::press(bool p);
+```
+
+<ParamField path="p" type="bool">
+  Pass `true` if the button is currently being touched; `false` if it is not. Combine with `contains()` to derive this value: `btn.press(btn.contains(tx, ty))`.
+</ParamField>
+
+<Note>
+  Always call `press()` **once per loop iteration**, even when there is no touch. Passing `false` is how the state machine learns the button has been released and arms `justReleased()` for the next frame.
+</Note>
+
+---
+
+## `isPressed()`
+
+Returns `true` if the button was marked as pressed in the most recent call to `press()`.
+
+```cpp
+bool TFT_eSPI_Button::isPressed();
+```
+
+Use this when you need to act **continuously** while a button is held down — for example, incrementing a value at each loop tick for a held increment/decrement button.
+
+---
+
+## `justPressed()`
+
+Returns `true` **only on the first loop iteration** after the button transitions from released → pressed — that is, the previous state was `false` and the current state is `true`.
+
+```cpp
+bool TFT_eSPI_Button::justPressed();
+```
+
+This is the recommended method for triggering a one-shot action when a button is first touched, because it fires exactly once per touch regardless of how long the finger stays on screen.
+
+---
+
+## `justReleased()`
+
+Returns `true` **only on the first loop iteration** after the button transitions from pressed → released — that is, the previous state was `true` and the current state is `false`.
+
+```cpp
+bool TFT_eSPI_Button::justReleased();
+```
+
+Use this to confirm a completed tap, or to restore the button's visual state after drawing it inverted.
+
+---
+
+## State-machine pattern
+
+The recommended pattern for every loop tick is:
+
+1. Read the touch controller with `tft.getTouch()`.
+2. Call `press()` on every button with the result of `contains()` — or `false` when there is no touch at all.
+3. Check `justPressed()` to fire one-shot actions on touch-down.
+4. Check `justReleased()` to fire one-shot actions on lift-off.
+5. Optionally check `isPressed()` for continuous held-down behaviour.
+
+<Warning>
+  Do **not** call `press()` more than once per loop iteration for a given button. Calling it a second time mid-loop would overwrite the previous state and corrupt edge detection for `justPressed()` and `justReleased()`.
+</Warning>
+
+---
+
+## Complete touch loop example
+
+```cpp complete touch loop
+#include <TFT_eSPI.h>
+#include <SPI.h>
+
+TFT_eSPI      tft = TFT_eSPI();
+TFT_eSPI_Button btnRed;
+TFT_eSPI_Button btnGreen;
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  btnRed.initButton(&tft,
+                    80, 120,
+                    120, 48,
+                    TFT_WHITE, TFT_RED, TFT_WHITE,
+                    "RED", 2);
+  btnRed.drawButton();
+
+  btnGreen.initButton(&tft,
+                      220, 120,
+                      120, 48,
+                      TFT_WHITE, TFT_DARKGREEN, TFT_WHITE,
+                      "GREEN", 2);
+  btnGreen.drawButton();
+}
+
+void loop() {
+  uint16_t tx = 0, ty = 0;
+  bool touched = tft.getTouch(&tx, &ty);
+
+  // -------- update press state for every button --------
+  btnRed.press(touched   && btnRed.contains(tx, ty));
+  btnGreen.press(touched && btnGreen.contains(tx, ty));
+
+  // -------- RED button --------
+  if (btnRed.justPressed()) {
+    btnRed.drawButton(true);                       // visual feedback
+    tft.fillRect(0, 0, tft.width(), 60, TFT_RED); // one-shot action
+  }
+  if (btnRed.justReleased()) {
+    btnRed.drawButton(false);                      // restore appearance
+  }
+
+  // -------- GREEN button --------
+  if (btnGreen.justPressed()) {
+    btnGreen.drawButton(true);
+    tft.fillRect(0, 0, tft.width(), 60, TFT_DARKGREEN);
+  }
+  if (btnGreen.justReleased()) {
+    btnGreen.drawButton(false);
+  }
+
+  // -------- continuous held-down action (optional) --------
+  if (btnRed.isPressed()) {
+    // Called every loop tick while RED is held
+    // e.g. slowly brighten a LED
+  }
+
+  delay(20); // ~50 Hz polling rate
+}
+```
+
+<Tip>
+  When your sketch has several buttons, loop over an array of `TFT_eSPI_Button` pointers and call `press()` on each one before checking any state. This ensures all buttons see the same touch snapshot for that frame.
+</Tip>

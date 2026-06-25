@@ -1,0 +1,511 @@
+---
+title: "TFT_eSPI Shape and Line Outline Drawing API Reference"
+sidebarTitle: "Drawing Shapes"
+description: "Full reference for TFT_eSPI outline drawing: pixels, lines, rectangles, circles, ellipses, triangles, arcs, bitmaps, and anti-aliased smooth shapes."
+---
+
+TFT_eSPI provides a rich set of shape-drawing methods for rendering outlines, lines, curves, and bitmaps to the display. These methods draw the border or path of a shape without filling its interior — for solid fills see the [Filling Shapes](/api/tft-espi/filling-shapes) reference. Several methods have anti-aliased "smooth" variants that blend edges with the background for sub-pixel precision. All coordinate parameters use screen pixels with `(0, 0)` at the top-left corner of the current rotation.
+
+## Method Summary
+
+| Method | Signature | Returns | Description |
+|---|---|---|---|
+| `drawPixel()` | `drawPixel(x, y, color)` | `void` | Draw a single opaque pixel |
+| `drawPixel()` | `drawPixel(x, y, color, alpha, bg_color)` | `uint16_t` | Draw an alpha-blended pixel |
+| `drawLine()` | `drawLine(xs, ys, xe, ye, color)` | `void` | Arbitrary straight line |
+| `drawFastHLine()` | `drawFastHLine(x, y, w, color)` | `void` | Optimized horizontal line |
+| `drawFastVLine()` | `drawFastVLine(x, y, h, color)` | `void` | Optimized vertical line |
+| `drawRect()` | `drawRect(x, y, w, h, color)` | `void` | Rectangle outline |
+| `drawRoundRect()` | `drawRoundRect(x, y, w, h, radius, color)` | `void` | Rounded rectangle outline |
+| `drawSmoothRoundRect()` | `drawSmoothRoundRect(x, y, r, ir, w, h, fg, bg, q)` | `void` | Anti-aliased rounded rect |
+| `drawCircle()` | `drawCircle(x, y, r, color)` | `void` | Circle outline |
+| `drawSmoothCircle()` | `drawSmoothCircle(x, y, r, fg, bg)` | `void` | Anti-aliased circle outline |
+| `drawCircleHelper()` | `drawCircleHelper(x, y, r, cornername, color)` | `void` | Quadrant arc helper |
+| `drawEllipse()` | `drawEllipse(x, y, rx, ry, color)` | `void` | Ellipse outline |
+| `drawTriangle()` | `drawTriangle(x1,y1, x2,y2, x3,y3, color)` | `void` | Triangle outline |
+| `drawArc()` | `drawArc(x, y, r, ir, start, end, fg, bg, smooth)` | `void` | Arc with optional AA |
+| `drawSmoothArc()` | `drawSmoothArc(x, y, r, ir, start, end, fg, bg, round)` | `void` | Arc with AA ends |
+| `drawSpot()` | `drawSpot(ax, ay, r, fg, bg)` | `void` | Anti-aliased filled dot |
+| `drawWideLine()` | `drawWideLine(ax, ay, bx, by, wd, fg, bg)` | `void` | Uniform-width AA line |
+| `drawWedgeLine()` | `drawWedgeLine(ax, ay, bx, by, aw, bw, fg, bg)` | `void` | Tapered AA line |
+| `drawBitmap()` | `drawBitmap(x, y, bitmap, w, h, fg[, bg])` | `void` | Monochrome bitmap |
+| `drawXBitmap()` | `drawXBitmap(x, y, bitmap, w, h, fg[, bg])` | `void` | XBM format bitmap |
+
+---
+
+## drawPixel() — Draw a Single Pixel
+
+```cpp
+// Overload 1 – opaque pixel
+void drawPixel(int32_t x, int32_t y, uint32_t color)
+
+// Overload 2 – alpha-blended pixel
+uint16_t drawPixel(int32_t x, int32_t y, uint32_t color,
+                   uint8_t alpha, uint32_t bg_color = 0x00FFFFFF)
+```
+
+Draws a single pixel. The second overload alpha-blends `color` over `bg_color` using the supplied `alpha` value. When `bg_color` is omitted (left at `0x00FFFFFF`) the library reads the background colour directly from the TFT or sprite at that coordinate before blending.
+
+<ParamField path="x" type="int32_t">
+  Horizontal pixel coordinate.
+</ParamField>
+<ParamField path="y" type="int32_t">
+  Vertical pixel coordinate.
+</ParamField>
+<ParamField path="color" type="uint32_t">
+  Pixel colour in RGB565 or a `TFT_*` colour constant.
+</ParamField>
+<ParamField path="alpha" type="uint8_t">
+  Alpha blend value (0 = fully transparent, 255 = fully opaque). Only used by overload 2.
+</ParamField>
+<ParamField path="bg_color" type="uint32_t">
+  Background colour for blending. Default `0x00FFFFFF` causes the background to be read from the display. Only used by overload 2.
+</ParamField>
+
+<ResponseField name="return (overload 2)" type="uint16_t">
+  The resulting RGB565 pixel colour after alpha blending.
+</ResponseField>
+
+```cpp title="Drawing pixels"
+tft.drawPixel(10, 10, TFT_RED);                          // opaque red pixel
+uint16_t result = tft.drawPixel(20, 20, TFT_BLUE, 128);  // 50% blue over display background
+```
+
+---
+
+## drawLine() — Arbitrary Line
+
+```cpp
+void drawLine(int32_t xs, int32_t ys, int32_t xe, int32_t ye, uint32_t color)
+```
+
+Draws a straight line between two points using Bresenham's line algorithm. The line is fully clipped to the current viewport.
+
+<ParamField path="xs" type="int32_t">X coordinate of the start point.</ParamField>
+<ParamField path="ys" type="int32_t">Y coordinate of the start point.</ParamField>
+<ParamField path="xe" type="int32_t">X coordinate of the end point.</ParamField>
+<ParamField path="ye" type="int32_t">Y coordinate of the end point.</ParamField>
+<ParamField path="color" type="uint32_t">Line colour.</ParamField>
+
+```cpp title="Drawing a diagonal line"
+tft.drawLine(0, 0, 239, 319, TFT_GREEN);
+```
+
+---
+
+## drawFastHLine() / drawFastVLine() — Optimized Axis-Aligned Lines
+
+```cpp
+void drawFastHLine(int32_t x, int32_t y, int32_t w, uint32_t color)
+void drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color)
+```
+
+Hardware-optimized horizontal and vertical line drawing. These are significantly faster than `drawLine()` for axis-aligned lines because a single address-window command covers the entire span, eliminating per-pixel overhead.
+
+<ParamField path="x" type="int32_t">X start coordinate.</ParamField>
+<ParamField path="y" type="int32_t">Y start coordinate.</ParamField>
+<ParamField path="w" type="int32_t">Length in pixels for the horizontal line.</ParamField>
+<ParamField path="h" type="int32_t">Length in pixels for the vertical line.</ParamField>
+<ParamField path="color" type="uint32_t">Line colour.</ParamField>
+
+```cpp title="Drawing axis-aligned lines"
+tft.drawFastHLine(10, 60, 200, TFT_WHITE); // horizontal white line
+tft.drawFastVLine(120, 0, 240, TFT_CYAN);  // vertical cyan line
+```
+
+---
+
+## drawRect() — Rectangle Outline
+
+```cpp
+void drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color)
+```
+
+Draws the outline of an axis-aligned rectangle. The top-left corner is positioned at `(x, y)` and the rectangle extends `w` pixels to the right and `h` pixels downward.
+
+<ParamField path="x" type="int32_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int32_t">Rectangle width in pixels.</ParamField>
+<ParamField path="h" type="int32_t">Rectangle height in pixels.</ParamField>
+<ParamField path="color" type="uint32_t">Border colour.</ParamField>
+
+```cpp title="Drawing a rectangle outline"
+tft.drawRect(10, 10, 100, 60, TFT_RED);
+```
+
+---
+
+## drawRoundRect() — Rounded Rectangle Outline
+
+```cpp
+void drawRoundRect(int32_t x, int32_t y, int32_t w, int32_t h,
+                   int32_t radius, uint32_t color)
+```
+
+Draws the outline of a rectangle with rounded corners. Larger `radius` values produce more pronounced curved corners.
+
+<ParamField path="x" type="int32_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="w" type="int32_t">Rectangle width.</ParamField>
+<ParamField path="h" type="int32_t">Rectangle height.</ParamField>
+<ParamField path="radius" type="int32_t">Corner arc radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t">Border colour.</ParamField>
+
+```cpp title="Drawing a rounded rectangle"
+tft.drawRoundRect(20, 20, 80, 50, 8, TFT_BLUE);
+```
+
+---
+
+## drawSmoothRoundRect() — Anti-Aliased Rounded Rectangle
+
+```cpp
+void drawSmoothRoundRect(int32_t x, int32_t y, int32_t r, int32_t ir,
+                         int32_t w, int32_t h,
+                         uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF,
+                         uint8_t quadrants = 0xF)
+```
+
+Draws an anti-aliased rounded rectangle arc. The arc thickness is `r - ir + 1`. When both `w` and `h` are 0 a full circle is drawn centred at `(x + r, y + r)`. Omitting `bg_color` causes the background to be read directly from the display for each edge pixel.
+
+<ParamField path="x" type="int32_t">X coordinate of the bounding box top-left corner.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the bounding box top-left corner.</ParamField>
+<ParamField path="r" type="int32_t">Outer corner radius.</ParamField>
+<ParamField path="ir" type="int32_t">Inner corner radius. Arc thickness = `r - ir + 1`.</ParamField>
+<ParamField path="w" type="int32_t">Bounding box width (set to 0 for a full circle).</ParamField>
+<ParamField path="h" type="int32_t">Bounding box height (set to 0 for a full circle).</ParamField>
+<ParamField path="fg_color" type="uint32_t">Foreground (arc) colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background colour for anti-aliasing. Default `0x00FFFFFF` reads from the display.</ParamField>
+<ParamField path="quadrants" type="uint8_t">
+  Bitmask selecting which quadrants to draw (default `0xF` = all four). Bit layout: top-left = 0x1, top-right = 0x2, bottom-right = 0x4, bottom-left = 0x8.
+</ParamField>
+
+```cpp title="Drawing an anti-aliased rounded rectangle"
+tft.drawSmoothRoundRect(10, 10, 12, 8, 100, 60, TFT_WHITE, TFT_BLACK);
+```
+
+---
+
+## drawCircle() — Circle Outline
+
+```cpp
+void drawCircle(int32_t x, int32_t y, int32_t r, uint32_t color)
+```
+
+Draws a circle outline using the optimized midpoint circle algorithm.
+
+<ParamField path="x" type="int32_t">X coordinate of the centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the centre.</ParamField>
+<ParamField path="r" type="int32_t">Radius in pixels.</ParamField>
+<ParamField path="color" type="uint32_t">Outline colour.</ParamField>
+
+```cpp title="Drawing a circle outline"
+tft.drawCircle(120, 120, 50, TFT_WHITE);
+```
+
+---
+
+## drawSmoothCircle() — Anti-Aliased Circle Outline
+
+```cpp
+void drawSmoothCircle(int32_t x, int32_t y, int32_t r,
+                      uint32_t fg_color, uint32_t bg_color)
+```
+
+Draws an anti-aliased circle outline. The line is rendered approximately 3 pixels thick to reduce the visible "braiding" artefact common with narrow anti-aliased lines — the inner anti-alias zone starts at `r - 1` and the outer zone ends at `r + 1`.
+
+<ParamField path="x" type="int32_t">X coordinate of the centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the centre.</ParamField>
+<ParamField path="r" type="int32_t">Radius in pixels.</ParamField>
+<ParamField path="fg_color" type="uint32_t">Foreground (circle outline) colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background colour used for anti-aliasing blending.</ParamField>
+
+```cpp title="Drawing an anti-aliased circle"
+tft.drawSmoothCircle(100, 100, 45, TFT_RED, TFT_BLACK);
+```
+
+---
+
+## drawCircleHelper() — Quadrant Arc Helper
+
+```cpp
+void drawCircleHelper(int32_t x, int32_t y, int32_t r,
+                      uint8_t cornername, uint32_t color)
+```
+
+Draws one or more quadrant arcs of a circle. This is an internal support function used by `drawRoundRect()`. The `cornername` bitmask selects which quadrants to render: bit 0 = top-left, bit 1 = top-right, bit 2 = bottom-right, bit 3 = bottom-left.
+
+<ParamField path="x" type="int32_t">X coordinate of the circle centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the circle centre.</ParamField>
+<ParamField path="r" type="int32_t">Radius in pixels.</ParamField>
+<ParamField path="cornername" type="uint8_t">Bitmask of quadrants to draw (0x1–0xF).</ParamField>
+<ParamField path="color" type="uint32_t">Arc colour.</ParamField>
+
+---
+
+## drawEllipse() — Ellipse Outline
+
+```cpp
+void drawEllipse(int16_t x, int16_t y, int32_t rx, int32_t ry, uint16_t color)
+```
+
+Draws an axis-aligned ellipse outline. To draw a circle, pass equal values for `rx` and `ry`.
+
+<ParamField path="x" type="int16_t">X coordinate of the centre.</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate of the centre.</ParamField>
+<ParamField path="rx" type="int32_t">Horizontal radius (semi-axis along X).</ParamField>
+<ParamField path="ry" type="int32_t">Vertical radius (semi-axis along Y).</ParamField>
+<ParamField path="color" type="uint16_t">Outline colour.</ParamField>
+
+```cpp title="Drawing an ellipse"
+tft.drawEllipse(120, 120, 60, 30, TFT_YELLOW);
+```
+
+---
+
+## drawTriangle() — Triangle Outline
+
+```cpp
+void drawTriangle(int32_t x1, int32_t y1,
+                  int32_t x2, int32_t y2,
+                  int32_t x3, int32_t y3,
+                  uint32_t color)
+```
+
+Draws the outline of a triangle defined by three arbitrary vertex coordinates. The three edges are drawn using `drawLine()` and are fully clipped to the viewport.
+
+<ParamField path="x1" type="int32_t">X coordinate of vertex 1.</ParamField>
+<ParamField path="y1" type="int32_t">Y coordinate of vertex 1.</ParamField>
+<ParamField path="x2" type="int32_t">X coordinate of vertex 2.</ParamField>
+<ParamField path="y2" type="int32_t">Y coordinate of vertex 2.</ParamField>
+<ParamField path="x3" type="int32_t">X coordinate of vertex 3.</ParamField>
+<ParamField path="y3" type="int32_t">Y coordinate of vertex 3.</ParamField>
+<ParamField path="color" type="uint32_t">Outline colour.</ParamField>
+
+```cpp title="Drawing a triangle outline"
+tft.drawTriangle(60, 10, 120, 110, 10, 110, TFT_YELLOW);
+```
+
+---
+
+## drawArc() — Arc (Configurable Anti-Aliasing)
+
+```cpp
+void drawArc(int32_t x, int32_t y, int32_t r, int32_t ir,
+             uint32_t startAngle, uint32_t endAngle,
+             uint32_t fg_color, uint32_t bg_color,
+             bool smoothArc = true)
+```
+
+Draws an arc clockwise from `startAngle` to `endAngle`. Angle 0° is at the 6 o'clock position, 90° at 9 o'clock. Arc **ends** are intentionally not anti-aliased, which keeps segment joints clean when you are building dynamic arc displays such as gauges or progress indicators. Side anti-aliasing is controlled by the `smoothArc` parameter.
+
+<ParamField path="x" type="int32_t">X coordinate of the arc centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the arc centre.</ParamField>
+<ParamField path="r" type="int32_t">Outer radius of the arc.</ParamField>
+<ParamField path="ir" type="int32_t">Inner radius (arc thickness = `r - ir + 1`).</ParamField>
+<ParamField path="startAngle" type="uint32_t">Start angle in degrees (0–360). 0° = 6 o'clock position.</ParamField>
+<ParamField path="endAngle" type="uint32_t">End angle in degrees (0–360). The arc draws clockwise from start to end.</ParamField>
+<ParamField path="fg_color" type="uint32_t">Foreground (arc) colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background colour for anti-aliasing.</ParamField>
+<ParamField path="smoothArc" type="bool">If `true` (default), arc sides are anti-aliased. Set `false` for hard-edged arc sides.</ParamField>
+
+```cpp title="Drawing a gauge arc"
+// Red arc from 12 o'clock (270°) to 3 o'clock (90°)
+tft.drawArc(160, 120, 80, 60, 270, 90, TFT_RED, TFT_BLACK);
+```
+
+---
+
+## drawSmoothArc() — Arc with Anti-Aliased Ends
+
+```cpp
+void drawSmoothArc(int32_t x, int32_t y, int32_t r, int32_t ir,
+                   uint32_t startAngle, uint32_t endAngle,
+                   uint32_t fg_color, uint32_t bg_color,
+                   bool roundEnds = false)
+```
+
+Like `drawArc()` but the arc **ends are also anti-aliased**. Optionally, rounded end caps can be enabled by setting `roundEnds = true`, which gives the arc a pill-shaped termination rather than a flat cut.
+
+<ParamField path="x" type="int32_t">X coordinate of the arc centre.</ParamField>
+<ParamField path="y" type="int32_t">Y coordinate of the arc centre.</ParamField>
+<ParamField path="r" type="int32_t">Outer arc radius.</ParamField>
+<ParamField path="ir" type="int32_t">Inner arc radius.</ParamField>
+<ParamField path="startAngle" type="uint32_t">Start angle 0–360° (0° = 6 o'clock).</ParamField>
+<ParamField path="endAngle" type="uint32_t">End angle 0–360°.</ParamField>
+<ParamField path="fg_color" type="uint32_t">Arc colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background colour for end-cap anti-aliasing.</ParamField>
+<ParamField path="roundEnds" type="bool">If `true`, arc ends are rounded. Default `false` gives straight anti-aliased ends.</ParamField>
+
+```cpp title="Drawing an arc with rounded ends"
+tft.drawSmoothArc(160, 120, 80, 65, 0, 270, TFT_CYAN, TFT_BLACK, true);
+```
+
+---
+
+## drawSpot() — Anti-Aliased Filled Circle (Sub-Pixel)
+
+```cpp
+void drawSpot(float ax, float ay, float r,
+              uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF)
+```
+
+Draws a small anti-aliased filled circle at floating-point coordinates for sub-pixel positioning accuracy. This method is maths-intensive and is intended only for small circles such as gauge needle pivot points. When `bg_color` is omitted the library reads the background from the display.
+
+<ParamField path="ax" type="float">Floating-point X coordinate of the centre.</ParamField>
+<ParamField path="ay" type="float">Floating-point Y coordinate of the centre.</ParamField>
+<ParamField path="r" type="float">Radius in pixels (floating-point).</ParamField>
+<ParamField path="fg_color" type="uint32_t">Spot colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background colour. Default `0x00FFFFFF` reads from the display.</ParamField>
+
+```cpp title="Drawing a sub-pixel pivot dot"
+tft.drawSpot(59.5f, 79.5f, 4.0f, TFT_WHITE, TFT_BLACK);
+```
+
+<Warning>
+  `drawSpot()` is maths-intensive. Use it only for small radii or infrequent draws to avoid frame rate issues.
+</Warning>
+
+---
+
+## drawWideLine() — Anti-Aliased Wide Line (Uniform Width)
+
+```cpp
+void drawWideLine(float ax, float ay, float bx, float by,
+                  float wd, uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF)
+```
+
+Draws an anti-aliased line with uniform pixel width `wd` and rounded ends from `(ax, ay)` to `(bx, by)`. Floating-point coordinates allow for smooth animation and sub-pixel accuracy.
+
+<ParamField path="ax" type="float">X start coordinate (floating-point).</ParamField>
+<ParamField path="ay" type="float">Y start coordinate.</ParamField>
+<ParamField path="bx" type="float">X end coordinate.</ParamField>
+<ParamField path="by" type="float">Y end coordinate.</ParamField>
+<ParamField path="wd" type="float">Line width in pixels.</ParamField>
+<ParamField path="fg_color" type="uint32_t">Line colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background colour for AA blending. Default `0x00FFFFFF` reads from the display.</ParamField>
+
+```cpp title="Drawing a wide anti-aliased line"
+tft.drawWideLine(10.0f, 10.0f, 200.0f, 180.0f, 4.0f, TFT_ORANGE, TFT_BLACK);
+```
+
+---
+
+## drawWedgeLine() — Anti-Aliased Tapered Line
+
+```cpp
+void drawWedgeLine(float ax, float ay, float bx, float by,
+                   float aw, float bw,
+                   uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF)
+```
+
+Draws an anti-aliased line that tapers from half-width `aw` at the start `(ax, ay)` to half-width `bw` at the end `(bx, by)`, creating a wedge or arrow shape. Set `bw` to 0 for a sharp pointed end.
+
+<ParamField path="ax" type="float">X start coordinate.</ParamField>
+<ParamField path="ay" type="float">Y start coordinate.</ParamField>
+<ParamField path="bx" type="float">X end coordinate.</ParamField>
+<ParamField path="by" type="float">Y end coordinate.</ParamField>
+<ParamField path="aw" type="float">Half-width at the start point in pixels.</ParamField>
+<ParamField path="bw" type="float">Half-width at the end point in pixels.</ParamField>
+<ParamField path="fg_color" type="uint32_t">Line colour.</ParamField>
+<ParamField path="bg_color" type="uint32_t">Background colour for AA blending. Default `0x00FFFFFF` reads from display.</ParamField>
+
+```cpp title="Drawing a tapered arrow"
+// Arrow: 8px wide at start, 1px at tip
+tft.drawWedgeLine(20.0f, 120.0f, 180.0f, 120.0f, 8.0f, 1.0f, TFT_MAGENTA, TFT_BLACK);
+```
+
+---
+
+## drawBitmap() — Monochrome Bitmap
+
+```cpp
+// With foreground colour only (background transparent)
+void drawBitmap(int16_t x, int16_t y, const uint8_t *bitmap,
+                int16_t w, int16_t h, uint16_t fgcolor)
+
+// With foreground and background colours
+void drawBitmap(int16_t x, int16_t y, const uint8_t *bitmap,
+                int16_t w, int16_t h, uint16_t fgcolor, uint16_t bgcolor)
+```
+
+Draws a 1-bit-per-pixel monochrome bitmap stored in a `uint8_t` array (MSB first, row-major). Set bits are drawn with `fgcolor`; clear bits are either transparent (overload 1) or drawn with `bgcolor` (overload 2).
+
+<ParamField path="x" type="int16_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="bitmap" type="const uint8_t *">Pointer to the bitmap data array (MSB first, row-major).</ParamField>
+<ParamField path="w" type="int16_t">Bitmap width in pixels.</ParamField>
+<ParamField path="h" type="int16_t">Bitmap height in pixels.</ParamField>
+<ParamField path="fgcolor" type="uint16_t">Colour for set pixels (bit = 1).</ParamField>
+<ParamField path="bgcolor" type="uint16_t">Colour for clear pixels (bit = 0). Only used in overload 2.</ParamField>
+
+```cpp title="Drawing a monochrome icon bitmap"
+static const uint8_t icon[] PROGMEM = { 0xFF, 0x81, 0x81, 0xFF };
+tft.drawBitmap(10, 10, icon, 8, 4, TFT_WHITE, TFT_BLACK);
+```
+
+---
+
+## drawXBitmap() — XBM Format Bitmap
+
+```cpp
+// Transparent background
+void drawXBitmap(int16_t x, int16_t y, const uint8_t *bitmap,
+                 int16_t w, int16_t h, uint16_t fgcolor)
+
+// Explicit background
+void drawXBitmap(int16_t x, int16_t y, const uint8_t *bitmap,
+                 int16_t w, int16_t h, uint16_t fgcolor, uint16_t bgcolor)
+```
+
+Draws a bitmap stored in X BitMap (XBM) format. XBM data is LSB-first — the opposite byte order from `drawBitmap()` — matching the output of GIMP's XBM export and the standard X11 XBM format.
+
+<ParamField path="x" type="int16_t">X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int16_t">Y coordinate of the top-left corner.</ParamField>
+<ParamField path="bitmap" type="const uint8_t *">Pointer to XBM format bitmap data (LSB first).</ParamField>
+<ParamField path="w" type="int16_t">Bitmap width in pixels.</ParamField>
+<ParamField path="h" type="int16_t">Bitmap height in pixels.</ParamField>
+<ParamField path="fgcolor" type="uint16_t">Colour for set bits.</ParamField>
+<ParamField path="bgcolor" type="uint16_t">Colour for clear bits. Only used in overload 2.</ParamField>
+
+```cpp title="Drawing an XBM logo"
+// XBM exported from GIMP — LSB-first byte order
+static const uint8_t logo_bits[] PROGMEM = { /* XBM data */ };
+tft.drawXBitmap(0, 0, logo_bits, 64, 64, TFT_WHITE, TFT_BLACK);
+```
+
+---
+
+## Complete Example
+
+```cpp title="Shapes showcase"
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Pixel and lines
+  tft.drawPixel(5, 5, TFT_WHITE);
+  tft.drawFastHLine(0, 20, tft.width(), TFT_DARKGREY);
+  tft.drawLine(0, 0, tft.width() - 1, tft.height() - 1, TFT_NAVY);
+
+  // Basic shapes
+  tft.drawRect(10, 30, 80, 50, TFT_RED);
+  tft.drawRoundRect(110, 30, 80, 50, 8, TFT_GREEN);
+  tft.drawCircle(250, 55, 25, TFT_BLUE);
+  tft.drawTriangle(300, 30, 340, 80, 260, 80, TFT_YELLOW);
+
+  // Anti-aliased arc (12 o'clock to 3 o'clock)
+  tft.drawSmoothArc(160, 160, 60, 45, 270, 90, TFT_CYAN, TFT_BLACK, true);
+
+  // Wide and wedge lines
+  tft.drawWideLine(10.0f, 160.0f, 140.0f, 200.0f, 5.0f, TFT_ORANGE, TFT_BLACK);
+  tft.drawWedgeLine(160.0f, 200.0f, 300.0f, 160.0f, 8.0f, 1.0f, TFT_MAGENTA, TFT_BLACK);
+}
+
+void loop() {}
+```

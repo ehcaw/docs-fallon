@@ -1,0 +1,354 @@
+---
+title: "Drawing Bitmaps and Images on TFT Displays"
+sidebarTitle: "Bitmaps"
+description: "Draw monochrome PROGMEM bitmaps, XBM images, and full-color RGB565 pixel arrays on TFT displays using TFT_eSPI's drawBitmap, drawXBitmap, and pushImage."
+---
+
+TFT_eSPI provides several complementary mechanisms for putting image data onto the display. Monochrome icons stored as packed bit arrays in flash are drawn with `drawBitmap` or `drawXBitmap`. Full-color images — generated at runtime, stored in PROGMEM, or decoded from JPEG/PNG — are pushed as raw RGB565 pixel buffers using `pushImage` or `pushRect`. Understanding which API to reach for in each scenario is key to getting correct byte order and the best rendering performance.
+
+---
+
+## Monochrome PROGMEM Bitmaps
+
+### `drawBitmap`
+
+`drawBitmap` renders a 1-bit-per-pixel bitmap stored in a byte array. Each `1` bit is drawn with the foreground color; each `0` bit is either skipped (transparent) or drawn with an explicit background color depending on which overload you call. Data must be packed **MSB-first**, row by row — the format produced by most Arduino bitmap converter tools.
+
+```cpp
+// Foreground only — 0-bits are transparent
+void drawBitmap(int16_t x, int16_t y,
+                const uint8_t *bitmap,
+                int16_t w, int16_t h,
+                uint16_t fgcolor);
+
+// Foreground and background — 0-bits are filled with bgcolor
+void drawBitmap(int16_t x, int16_t y,
+                const uint8_t *bitmap,
+                int16_t w, int16_t h,
+                uint16_t fgcolor, uint16_t bgcolor);
+```
+
+<ParamField path="x" type="int16_t" required>X coordinate of the top-left corner.</ParamField>
+<ParamField path="y" type="int16_t" required>Y coordinate of the top-left corner.</ParamField>
+<ParamField path="bitmap" type="const uint8_t*" required>
+  Pointer to the bitmap data. Bits are packed MSB-first, one row after another. Declare the array with the `PROGMEM` keyword to keep it in flash.
+</ParamField>
+<ParamField path="w" type="int16_t" required>Bitmap width in pixels.</ParamField>
+<ParamField path="h" type="int16_t" required>Bitmap height in pixels.</ParamField>
+<ParamField path="fgcolor" type="uint16_t" required>Color used where the bit is `1`.</ParamField>
+<ParamField path="bgcolor" type="uint16_t">Color used where the bit is `0`. When omitted, `0`-bits are skipped (transparent over the existing display content).</ParamField>
+
+---
+
+### `drawXBitmap`
+
+`drawXBitmap` works identically to `drawBitmap` but expects data in **XBM format**, where bits are packed **LSB-first** — the opposite byte order. This matches the output of the GIMP *Export as XBM* option and the standard X11 XBM format.
+
+```cpp
+// Foreground only
+void drawXBitmap(int16_t x, int16_t y,
+                 const uint8_t *bitmap,
+                 int16_t w, int16_t h,
+                 uint16_t fgcolor);
+
+// Foreground and background
+void drawXBitmap(int16_t x, int16_t y,
+                 const uint8_t *bitmap,
+                 int16_t w, int16_t h,
+                 uint16_t fgcolor, uint16_t bgcolor);
+```
+
+Parameters are identical to `drawBitmap`. The only difference is the LSB-first bit order expected in the data array.
+
+<Note>
+**`drawBitmap` vs `drawXBitmap`** — `drawBitmap` expects MSB-first data (most online Arduino bitmap converters and image2cpp). `drawXBitmap` expects LSB-first XBM data (GIMP exports, standard `.xbm` files). If your image appears horizontally mirrored, you are using the wrong function.
+</Note>
+
+---
+
+### Converting Images to C Arrays
+
+You need to turn your source image into a packed byte array before you can use either `drawBitmap` or `drawXBitmap`. Two widely used tools for this are:
+
+<Tabs>
+  <Tab title="image2cpp (online)">
+    [image2cpp](https://javl.github.io/image2cpp/) is a browser-based tool. Upload your image, set the output format to **"Arduino code"** and the bit order to **MSB first**, then copy the generated `uint8_t` array into your sketch. Use the resulting array with `drawBitmap`.
+
+    Key settings:
+    - **Canvas size** — set to match the exact pixel dimensions of your image
+    - **Background color** — choose Black or White depending on which bit value you want to represent "on"
+    - **Output format** — "Arduino code" for `drawBitmap`, or "XBM" for `drawXBitmap`
+  </Tab>
+  <Tab title="LCD Image Converter">
+    [LCD Image Converter](https://sourceforge.net/projects/lcd-image-converter/) is a desktop application. Open your image, go to **Image → Options**, set the bit order to MSB first, then export as a C source file. The generated array is ready to paste into your sketch.
+  </Tab>
+  <Tab title="GIMP Export">
+    In GIMP, scale your image to the target pixel size, convert to **1-bit color** (Image → Mode → Indexed, 2 colors), then **File → Export As** and choose the `.xbm` extension. GIMP writes LSB-first XBM data, so use the resulting array with `drawXBitmap`.
+  </Tab>
+</Tabs>
+
+---
+
+### Example — PROGMEM Icon
+
+```cpp drawBitmap.ino
+#include <TFT_eSPI.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+// 16×16 checkmark icon — MSB-first, 1 bit per pixel
+// Generated with image2cpp
+static const uint8_t checkmark[] PROGMEM = {
+  0x00, 0x00,  // Row  0
+  0x00, 0x01,  // Row  1: ...............#
+  0x00, 0x03,  // Row  2: ..............##
+  0x00, 0x06,  // Row  3: .............##.
+  0x00, 0x0C,  // Row  4: ............##..
+  0x20, 0x18,  // Row  5: ..#.........##..
+  0x30, 0x30,  // Row  6: ..##.......##...
+  0x38, 0x60,  // Row  7: ..###.....##....
+  0x1C, 0xC0,  // Row  8: ...###...##.....
+  0x0F, 0x80,  // Row  9: ....####.##.....
+  0x07, 0x00,  // Row 10: .....###........
+  0x03, 0x00,  // Row 11: ......##........
+  0x01, 0x00,  // Row 12: .......#........
+  0x00, 0x00,  // Row 13
+  0x00, 0x00,  // Row 14
+  0x00, 0x00,  // Row 15
+};
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Draw with transparent background (0-bits are skipped)
+  tft.drawBitmap(10, 10, checkmark, 16, 16, TFT_GREEN);
+
+  // Draw with solid black background (0-bits filled)
+  tft.drawBitmap(40, 10, checkmark, 16, 16, TFT_GREEN, TFT_BLACK);
+}
+
+void loop() {}
+```
+
+---
+
+## Full-Color Pixel Buffers
+
+### `pushImage`
+
+`pushImage` copies a block of RGB565 pixel data from a RAM or PROGMEM buffer directly to a rectangular region of the display. This is the primary method for rendering decoded images, sprite frames, and generated pixel art. Multiple overloads handle 16-bit and 8-bit source buffers, optional transparency key colors, and optional palette look-up tables.
+
+```cpp
+// 16-bit RGB565 buffer from RAM
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               uint16_t *data);
+
+// 16-bit RGB565 with a transparent color key
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               uint16_t *data, uint16_t transparent);
+
+// 16-bit RGB565 const buffer (PROGMEM)
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               const uint16_t *data);
+
+// 16-bit RGB565 const buffer with transparency
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               const uint16_t *data, uint16_t transparent);
+
+// 8-bit palette-indexed or raw 8-bit buffer
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               uint8_t *data, bool bpp8 = true,
+               uint16_t *cmap = nullptr);
+
+// 8-bit buffer with transparent palette index
+void pushImage(int32_t x, int32_t y, int32_t w, int32_t h,
+               uint8_t *data, uint8_t transparent,
+               bool bpp8 = true, uint16_t *cmap = nullptr);
+```
+
+<ParamField path="x, y" type="int32_t" required>Top-left corner of the destination rectangle on the display.</ParamField>
+<ParamField path="w, h" type="int32_t" required>Width and height of the image in pixels.</ParamField>
+<ParamField path="data" type="uint16_t* / uint8_t*" required>
+  Pointer to the pixel buffer. For RGB565 images each pixel is a `uint16_t` (2 bytes). For 8-bit images each byte is a palette index or raw 8-bit color.
+</ParamField>
+<ParamField path="transparent" type="uint16_t / uint8_t">
+  Color key: pixels with this value are not written to the display, leaving the existing background visible.
+</ParamField>
+<ParamField path="bpp8" type="bool">
+  For 8-bit buffers: `true` (default) = 8-bit palette-indexed mode (requires `cmap`). `false` = 1-bit per pixel.
+</ParamField>
+<ParamField path="cmap" type="uint16_t*">
+  Pointer to a 256-entry RGB565 color palette for 8-bit indexed images.
+</ParamField>
+
+```cpp pushImage.ino
+// Fill a 50×50 pixel buffer and push it to the display
+uint16_t imgBuf[50 * 50];
+for (int i = 0; i < 50 * 50; i++) {
+  imgBuf[i] = tft.color565(random(256), random(256), random(256));
+}
+tft.pushImage(10, 10, 50, 50, imgBuf);
+
+// Push with magenta (0xF81F) as a transparent color key
+tft.pushImage(70, 10, 50, 50, imgBuf, (uint16_t)0xF81F);
+```
+
+---
+
+### `pushRect`
+
+`pushRect` pushes a `uint16_t` pixel buffer to a display rectangle. It is functionally equivalent to the plain `pushImage` overload — use whichever name is clearer in your code.
+
+```cpp
+void pushRect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data);
+```
+
+<ParamField path="x, y" type="int32_t" required>Top-left corner of the destination.</ParamField>
+<ParamField path="w, h" type="int32_t" required>Width and height in pixels.</ParamField>
+<ParamField path="data" type="uint16_t*" required>RGB565 pixel buffer with `w × h` entries.</ParamField>
+
+```cpp pushRect.ino
+tft.pushRect(0, 0, 320, 240, frameBuffer);  // Blit a full-screen frame
+```
+
+---
+
+## Reading Pixels from the Display
+
+### `readRect`
+
+`readRect` reads a rectangular region of the display into a `uint16_t` buffer. The canonical use case is saving a background region before drawing a sprite, then restoring it afterward.
+
+```cpp
+void readRect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data);
+```
+
+<ParamField path="x, y" type="int32_t" required>Top-left corner of the source rectangle.</ParamField>
+<ParamField path="w, h" type="int32_t" required>Width and height in pixels.</ParamField>
+<ParamField path="data" type="uint16_t*" required>Destination buffer — must hold at least `w × h` `uint16_t` entries.</ParamField>
+
+```cpp readRect.ino
+uint16_t saved[32 * 32];
+tft.readRect(100, 100, 32, 32, saved);    // Save 32×32 region
+
+// ... draw a sprite over it ...
+
+tft.pushRect(100, 100, 32, 32, saved);    // Restore the background
+```
+
+<Warning>
+`readRect` requires the display controller to support pixel read-back over SPI. Not all TFT controllers or wiring configurations support this, and it is significantly slower than write operations regardless.
+</Warning>
+
+---
+
+## Byte Order and `setSwapBytes`
+
+TFT_eSPI internally stores colors in the display-native byte order. RGB565 image data loaded from external sources — BMP files, JPEG decoders, PNG decoders — often has the high and low bytes swapped relative to what the display expects. Calling `setSwapBytes(true)` before `pushImage` instructs the library to swap both bytes of every pixel as it writes.
+
+```cpp
+void setSwapBytes(bool swap);
+bool getSwapBytes(void);
+```
+
+<ParamField path="swap" type="bool" required>
+  `true` — swap byte order before writing (required for most externally-sourced RGB565 bitmaps from BMP files or JPEG decoders). `false` — no swap (default, correct for Arduino image converter output).
+</ParamField>
+
+```cpp setSwapBytes.ino
+tft.setSwapBytes(true);
+tft.pushImage(0, 0, 320, 240, bmpData);   // Bytes are swapped as written
+tft.setSwapBytes(false);                  // Restore default for other draws
+```
+
+<Tip>
+If your pushed image looks like random-colored noise or a corrupted rainbow, toggle `setSwapBytes`. Arduino bitmap converter tools (image2cpp) typically produce native byte order; BMP file RGB565 data and most JPEG decoder outputs are byte-swapped.
+</Tip>
+
+---
+
+## Choosing the Right Function
+
+| Scenario | Function to use |
+|---|---|
+| Monochrome icon in PROGMEM (MSB-first) | `drawBitmap` |
+| Monochrome icon exported from GIMP (LSB-first XBM) | `drawXBitmap` |
+| Full-color RGB565 image in RAM | `pushImage` / `pushRect` |
+| Full-color RGB565 image in PROGMEM (`const uint16_t[]`) | `pushImage` (const overload) |
+| Full-color image from a BMP/JPEG decoder | `pushImage` + `setSwapBytes(true)` |
+| Save/restore a background region | `readRect` + `pushRect` |
+
+---
+
+## Complete Example — PROGMEM Color Bitmap
+
+The example below stores a small 20×20 gradient sprite as a `const uint16_t` array in PROGMEM and pushes it to the display, then overlays a monochrome icon on top.
+
+```cpp bitmap_demo.ino
+#include <TFT_eSPI.h>
+#include <pgmspace.h>
+
+TFT_eSPI tft = TFT_eSPI();
+
+// ── 8×8 smiley face — MSB-first, 1 bit per pixel ─────────────────────────
+static const uint8_t smiley[] PROGMEM = {
+  0b00111100,  // ..####..
+  0b01000010,  // .#....#.
+  0b10100101,  // #.#..#.# (eyes)
+  0b10000001,  // #......#
+  0b10100101,  // #.#..#.# (mouth corners)
+  0b10011001,  // #..##..#
+  0b01000010,  // .#....#.
+  0b00111100,  // ..####..
+};
+
+// ── 20×20 gradient sprite stored as RGB565 in PROGMEM ─────────────────────
+// (In a real project, generate this array with image2cpp or LCD Image Converter)
+static const uint16_t sprite[] PROGMEM = {
+  // 400 pixels — abbreviated here; fill with image2cpp output
+  0x0000, 0x0820, 0x1040, 0x1860, 0x2080, /* ... row 0 ... */
+  // ...
+};
+
+void setup() {
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // ── Step 1: push the color sprite from PROGMEM ──────────────────────────
+  // Use the const overload so no RAM copy is needed
+  tft.pushImage(10, 10, 20, 20, sprite);
+
+  // ── Step 2: overlay a monochrome icon ────────────────────────────────────
+  tft.drawBitmap(50, 10, smiley, 8, 8, TFT_WHITE);            // transparent bg
+  tft.drawBitmap(70, 10, smiley, 8, 8, TFT_YELLOW, TFT_NAVY); // solid bg
+
+  // ── Step 3: readRect / pushRect round-trip ───────────────────────────────
+  uint16_t saved[20 * 20];
+  tft.readRect(10, 10, 20, 20, saved);         // capture the sprite region
+
+  tft.fillRect(10, 10, 20, 20, TFT_BLACK);     // erase it
+  delay(500);
+
+  tft.pushRect(10, 10, 20, 20, saved);         // restore it
+}
+
+void loop() {}
+```
+
+<Steps>
+  <Step title="Store your bitmap in PROGMEM">
+    Declare the array with `static const uint8_t myIcon[] PROGMEM = { ... };`. This keeps the data in flash rather than consuming precious RAM.
+  </Step>
+  <Step title="Choose the correct bit order">
+    Use `drawBitmap` for MSB-first data (image2cpp default) and `drawXBitmap` for LSB-first XBM data (GIMP exports).
+  </Step>
+  <Step title="Check byte order for color images">
+    Call `tft.setSwapBytes(true)` before `pushImage` if your RGB565 data comes from a BMP file or a JPEG decoder. Revert with `setSwapBytes(false)` afterward.
+  </Step>
+  <Step title="Provide an explicit background color where possible">
+    Passing a known background color to anti-aliased functions instead of relying on pixel read-back avoids slow SPI reads and speeds up rendering noticeably.
+  </Step>
+</Steps>
