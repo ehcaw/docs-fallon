@@ -56,7 +56,7 @@ TFT_eSPI ships with 25 ready-to-use color constants. All of them are `int32_t` v
 | `TFT_TRANSPARENT` | `0x0120`  |  —  |    —  |   —  |
 
 <Note>
-  `TFT_TRANSPARENT` (`0x0120`) is a reserved sentinel value used as a **sprite color key**, not a real drawable color. See the section below for details.
+  `TFT_TRANSPARENT` (`0x0120`) is a special reserved value used as a **sprite color key**. It renders as a very dark green if drawn directly, but its primary purpose is to mark transparent pixels in sprite buffers. See the section below for details.
 </Note>
 
 ## Constructing Custom Colors with color565()
@@ -163,7 +163,7 @@ void loop() {}
 When you push a sprite to the display and mark `TFT_TRANSPARENT` as the transparent color key, any pixel holding that value is **skipped** rather than drawn, producing true sprite transparency without a dedicated alpha channel.
 
 <Warning>
-  Avoid using `TFT_TRANSPARENT` as an intentional fill color in your UI. Any pixel painted with it will become invisible when the sprite is pushed to the screen, because the library treats it as "no color here."
+  Avoid using `TFT_TRANSPARENT` as an intentional fill color inside a sprite. Any sprite pixel holding that value will be skipped (not drawn) when `pushSprite()` is called with `TFT_TRANSPARENT` as the color key. Use a different dark green value if you need the actual color without triggering transparency.
 </Warning>
 
 ## Default 4-Bit Palette for Sprites

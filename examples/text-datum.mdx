@@ -45,12 +45,13 @@ For example, with `MC_DATUM` the coordinate you supply becomes the exact centre 
 ## Basic Usage
 
 ```cpp basic_datum.ino
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();
 
 void setup() {
-  tft.begin();
+  tft.init();
   tft.setRotation(1);  // Landscape
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -91,12 +92,13 @@ tft.drawString("Top left corner!", 0, 0, 2);
 The snippet below demonstrates the three most common alignment patterns in a single sketch:
 
 ```cpp alignment.ino
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();
 
 void setup() {
-  tft.begin();
+  tft.init();
   tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -132,6 +134,7 @@ void loop() {}
 The following sketch renders a labelled string at every datum position so you can see exactly where each anchor point lands on your hardware:
 
 ```cpp all_datums.ino
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();
@@ -145,7 +148,7 @@ const char*   names[]     = { "TL", "TC", "TR",
                                "BL", "BC", "BR" };
 
 void setup() {
-  tft.begin();
+  tft.init();
   tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);

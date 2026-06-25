@@ -65,7 +65,7 @@ The tables below show standard SPI wiring for two common platforms. Adapt GPIO n
 | GND         | Ground        | GND        |                                  |
 | CS          | Chip Select   | GP17       | Define as `TFT_CS`               |
 | RESET       | Reset         | GP15       | Define as `TFT_RST`              |
-| DC / RS     | Data/Command  | GP16       | Define as `TFT_DC`               |
+| DC / RS     | Data/Command  | GP20       | Define as `TFT_DC`               |
 | MOSI        | SPI TX        | GP19       | SPI0 TX                          |
 | SCLK        | SPI Clock     | GP18       | SPI0 SCK                         |
 | LED / BL    | Backlight     | 3V3(OUT)   |                                  |
@@ -211,6 +211,7 @@ The ILI9341 fully supports DMA on ESP32, ESP32-S3, RP2040, and STM32Fxxx when op
 Once your `User_Setup.h` (or `platformio.ini`) is configured and saved, upload the following sketch to confirm your wiring:
 
 ```cpp ILI9341 basic usage
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();  // Reads settings from User_Setup.h at compile time

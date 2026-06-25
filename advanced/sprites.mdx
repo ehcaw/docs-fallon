@@ -8,7 +8,7 @@ Sprites are off-screen pixel buffers that let you compose a complete frame in RA
 
 ## The TFT_eSprite Class
 
-`TFT_eSprite` is a **friend class** of `TFT_eSPI` that inherits all of its drawing methods. It overrides the low-level pixel-write routines so that every drawing call targets the sprite's internal RAM buffer rather than the physical display. Once you are happy with the contents of the sprite, a single method call transfers it to the screen.
+`TFT_eSprite` is a **subclass** of `TFT_eSPI` that inherits all of its drawing methods. It overrides the low-level pixel-write routines so that every drawing call targets the sprite's internal RAM buffer rather than the physical display. Once you are happy with the contents of the sprite, a single method call transfers it to the screen.
 
 <Note>
   Because `TFT_eSprite` inherits from `TFT_eSPI`, every drawing function you know from the main display object — `fillRect()`, `drawString()`, `drawCircle()`, anti-aliased helpers, smooth fonts — works identically on a sprite. There is no separate API to learn.

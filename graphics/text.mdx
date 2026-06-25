@@ -1,6 +1,6 @@
 ---
-title: "Rendering Text and Numbers on TFT Displays"
-sidebarTitle: "Text"
+title: "Rendering Text and Numbers on TFT Displays with TFT_eSPI"
+sidebarTitle: "Text Rendering"
 description: "Draw strings, integers, and floats on TFT displays using TFT_eSPI — configure fonts, colors, datum alignment, padding, size, and wrapping."
 ---
 
@@ -242,6 +242,66 @@ int16_t drawRightString(const String& string, int32_t x, int32_t y, uint8_t font
 tft.drawCentreString("Centered", 160, 10, 2);     // Centered at x = 160
 tft.drawRightString("Right",     319, 30, 2);     // Right edge at x = 319
 ```
+
+---
+
+## Drawing Single Characters
+
+### `drawChar`
+
+Three overloads let you draw a single character — either with explicit color and size arguments (mirroring the Adafruit GFX interface), or using the current text settings with an optional font number.
+
+```cpp
+void    drawChar(int32_t x, int32_t y, uint16_t c, uint32_t color, uint32_t bg, uint8_t size);
+int16_t drawChar(uint16_t uniCode, int32_t x, int32_t y);
+int16_t drawChar(uint16_t uniCode, int32_t x, int32_t y, uint8_t font);
+```
+
+<ParamField path="x" type="int32_t" required>X coordinate of the top-left corner of the character.</ParamField>
+<ParamField path="y" type="int32_t" required>Y coordinate of the top-left corner of the character.</ParamField>
+<ParamField path="c" type="uint16_t" required>Character code (first overload only).</ParamField>
+<ParamField path="color" type="uint32_t" required>Foreground color (first overload only).</ParamField>
+<ParamField path="bg" type="uint32_t" required>Background color (first overload only).</ParamField>
+<ParamField path="size" type="uint8_t" required>Pixel-doubling scale multiplier (first overload only).</ParamField>
+<ParamField path="uniCode" type="uint16_t" required>Unicode code point to render (second and third overloads).</ParamField>
+<ParamField path="font" type="uint8_t">Font number (third overload only). Omit to use the current font.</ParamField>
+
+The second and third overloads return the character width in pixels. The first overload returns `void`.
+
+```cpp drawChar.ino
+tft.drawChar(10, 10, 'H', TFT_WHITE, TFT_BLACK, 2);   // GFX-style: explicit fg, bg, size
+tft.drawChar('A', 40, 10);                              // Unicode 'A', current font and color
+tft.drawChar('A', 70, 10, 4);                           // Unicode 'A', font 4
+```
+
+---
+
+## Selecting Free Fonts
+
+### `setFreeFont`
+
+Load an Adafruit GFX-compatible proportional font for use with `drawString()` and `print()`. Pass `NULL` to revert to the built-in GLCD font. Requires `LOAD_GFXFF` to be enabled in `User_Setup.h`.
+
+```cpp
+void setFreeFont(const GFXfont *f = NULL);
+```
+
+<ParamField path="f" type="const GFXfont*">
+  Pointer to a `GFXfont` structure (typically a `PROGMEM` constant from the `Fonts/` directory). Pass `NULL` or omit the argument to revert to the built-in font.
+</ParamField>
+
+```cpp setFreeFont.ino
+#include <Fonts/FreeSansBold12pt7b.h>
+
+tft.setFreeFont(&FreeSansBold12pt7b);
+tft.drawString("Free Font!", 10, 30);
+
+tft.setFreeFont(NULL);    // Revert to built-in GLCD font
+```
+
+<Note>
+Free fonts use a different coordinate system: the `y` position marks the text baseline, not the top of the glyph. Account for the ascent when positioning labels.
+</Note>
 
 ---
 

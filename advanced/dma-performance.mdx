@@ -227,3 +227,7 @@ tft.setAttribute(PSRAM_ENABLE, true);   // Enable PSRAM for sprites
 <Note>
   `PSRAM_ENABLE` is incompatible with `DMA_Enabled`. PSRAM on ESP32 is not DMA-capable, so the library disables PSRAM allocation automatically when DMA is active. Choose one strategy or the other for large buffers.
 </Note>
+
+## ESP32 Transfer Buffer Checking
+
+On ESP32, the DMA-backed SPI peripheral uses a set of internal transfer buffers. The `spiBusyCheck` member controls how many of those buffers are checked for completion before a new transfer begins. In practice this is managed automatically by `dmaWait()`, but it is exposed for advanced tuning via the `SPI_BUSY_CHECK` compile-time define in `User_Setup.h`.

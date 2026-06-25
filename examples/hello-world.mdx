@@ -18,6 +18,7 @@ Every TFT_eSPI journey starts with the same milestone: text on a screen. This pa
 Here is the full Hello World sketch exactly as it runs on an ESP32 or ESP8266 with a 128×160 or 240×320 TFT panel:
 
 ```cpp hello_world.ino
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();
@@ -144,6 +145,7 @@ void loop() {
 Once text is working, you can extend the sketch with rectangles and circles to build simple UI layouts. The following sketch fills the screen, prints a title, and draws a border rectangle plus a centred circle:
 
 ```cpp shapes.ino
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();
@@ -188,6 +190,7 @@ The shapes API follows a consistent convention: functions prefixed `draw` render
 `println` moves the cursor as a side effect, which makes it awkward when you want to place text at exact pixel coordinates. `drawString` is the preferred alternative — it accepts explicit `x` and `y` coordinates and is unaffected by the cursor state:
 
 ```cpp draw_string.ino
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();
@@ -234,6 +237,7 @@ tft.drawString("Orange text", 10, 100);
 Hard-coding pixel coordinates makes sketches fragile when you move to a different panel. Use `tft.width()` and `tft.height()` to write code that adapts automatically:
 
 ```cpp adaptive.ino
+#include <SPI.h>
 #include <TFT_eSPI.h>
 
 TFT_eSPI tft = TFT_eSPI();

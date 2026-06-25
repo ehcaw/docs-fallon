@@ -1,7 +1,7 @@
 ---
 title: "TFT_eSPI setup_t Struct and Configuration Constants"
 sidebarTitle: "setup_t Struct"
-description: "Full field reference for the TFT_eSPI setup_t diagnostics struct, getSetup() usage, key header constants, and the getColorCallback typedef."
+description: "Full field reference for the TFT_eSPI setup_t diagnostics struct, getSetup(), verifySetupID(), header constants, and the getColorCallback typedef."
 ---
 
 TFT_eSPI is configured at compile time through a `User_Setup.h` file, but you can read those settings back at **runtime** — without any impact on code size unless you actually call the retrieval function — by using `getSetup()`. This populates a `setup_t` struct with every configured parameter: library version, display driver code, pin assignments, SPI frequencies, and more. The primary use-case is diagnostics: print the struct fields over Serial to confirm that the build-time configuration matches your hardware without having to dig through header files or guess pin numbers from board silkscreen labels.
@@ -215,21 +215,58 @@ typedef struct {
 
 ---
 
-## Verifying setup identity with `verifySetupID()`
+## `verifySetupID()`
 
-If you distribute a project that requires a specific `User_Setup.h` configuration, you can embed a numeric ID in that file and then assert it at runtime so users get an early warning if they compiled with the wrong setup file:
+Compares the given `id` against the `setup_id` compiled into the library via `User_Setup.h`. Use this in diagnostic sketches to confirm that the correct hardware configuration is active.
+
+```cpp
+bool TFT_eSPI::verifySetupID(uint32_t id);
+```
+
+<ParamField path="id" type="uint32_t">
+  The expected setup ID value to verify against the compiled configuration.
+</ParamField>
+
+**Returns** `bool` — `true` if `id` matches the compiled `setup_id`.
+
+If you distribute a project that requires a specific `User_Setup.h` configuration, embed a numeric ID in that file and assert it at runtime so users get an early warning if they compiled with the wrong setup file:
 
 ```cpp verifySetupID usage
 // In User_Setup.h:
 //   #define USER_SETUP_ID  101
 
-setup_t cfg;
-tft.getSetup(cfg);
-
-if (cfg.setup_id != 101) {
+if (!tft.verifySetupID(101)) {
   Serial.println("ERROR: wrong User_Setup.h — expected setup ID 101");
   while (true) {}  // halt
 }
+```
+
+---
+
+## `getColorCallback` typedef
+
+Defines the function signature for a smooth-font pixel color source callback. When rendering smooth (anti-aliased) fonts, TFT_eSPI can call back into your code to retrieve the background color at each pixel position — enabling correct anti-aliasing over any background image.
+
+```cpp
+typedef uint16_t (*getColorCallback)(uint16_t x, uint16_t y);
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `x` | `uint16_t` | Screen x coordinate of the pixel being rendered. |
+| `y` | `uint16_t` | Screen y coordinate of the pixel being rendered. |
+| **Returns** | `uint16_t` | 16-bit RGB565 color of the background at `(x, y)`. |
+
+```cpp
+// Example: flat-color background callback
+uint16_t myBgColor(uint16_t x, uint16_t y) {
+  (void)x; (void)y;          // position unused for a solid background
+  return TFT_NAVY;
+}
+
+// Pass the callback to the smooth-font draw function
+tft.setTextColor(TFT_WHITE);
+tft.drawString("Smooth text", 20, 60);  // uses registered callback for bg blending
 ```
 
 ---

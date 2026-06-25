@@ -1,18 +1,22 @@
 ---
 title: "TFT_eSPI Fonts, Text Datums, and String Alignment"
 sidebarTitle: "Fonts & Datums"
-description: "Learn TFT_eSPI's built-in bitmap fonts 1–8, GFX free fonts, smooth VLW fonts, and all 12 text datum constants for precise text positioning and alignment."
+description: "Learn TFT_eSPI's built-in bitmap fonts, GFX free fonts, smooth VLW fonts, and all 12 text datum constants for precise text positioning and alignment."
 ---
 
 TFT_eSPI offers a rich text rendering system that covers everything from compact GLCD bitmaps to smooth anti-aliased fonts loaded from a filesystem. Alongside font selection, the library provides a **datum** system — a set of named reference points — that lets you anchor text to any corner, edge, or centre of its bounding box without manually measuring string widths in pixels.
 
 ## Built-in Bitmap Fonts
 
-TFT_eSPI includes eight built-in bitmap fonts selectable by number. Select one with `setTextFont(n)`, or pass the font number directly as the last argument to `drawString()`:
+TFT_eSPI provides six built-in bitmap fonts, identified by the numbers 1, 2, 4, 6, 7, and 8. Select one with `setTextFont(n)`, or pass the font number directly as the last argument to `drawString()`:
 
 ```cpp
-void TFT_eSPI::setTextFont(uint8_t f);  // f = 1 to 8
+void TFT_eSPI::setTextFont(uint8_t f);  // f = 1, 2, 4, 6, 7, or 8
 ```
+
+<Note>
+  Font numbers 3 and 5 are reserved slots in the library's internal font table but contain no glyph data. Calling `setTextFont(3)` or `setTextFont(5)` produces no visible output — use only the six numbers listed below.
+</Note>
 
 | Font | Description                           | Approx. Height | Encoding |
 |:----:|---------------------------------------|:--------------:|:--------:|
@@ -181,7 +185,7 @@ void loop() {
 
 <Steps>
   <Step title="Choose a font">
-    Call `setTextFont(n)` for built-in fonts 1–8, `setFreeFont(&font)` for GFX proportional fonts, or `loadFont("name")` to use a smooth anti-aliased VLW font from the filesystem.
+    Call `setTextFont(n)` for built-in fonts (1, 2, 4, 6, 7, or 8), `setFreeFont(&font)` for GFX proportional fonts, or `loadFont("name")` to use a smooth anti-aliased VLW font from the filesystem.
   </Step>
   <Step title="Set the datum">
     Call `setTextDatum(d)` with one of the 12 datum constants to define which part of the text bounding box the `(x, y)` coordinate anchors to. The default is `TL_DATUM`.

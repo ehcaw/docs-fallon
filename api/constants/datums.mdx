@@ -1,7 +1,7 @@
 ---
 title: "TFT_eSPI Datum Constants: Text Alignment Reference"
 sidebarTitle: "Datum Constants"
-description: "All 12 TFT_eSPI text datum alignment constants — TL_DATUM through R_BASELINE — with a visual layout guide, alias table, and setTextDatum() usage examples."
+description: "All 12 TFT_eSPI text datum constants — TL_DATUM through R_BASELINE — with a visual layout diagram, alias table, and setTextDatum() usage examples."
 ---
 
 In TFT_eSPI, a **datum** is the anchor point that `drawString()` and related text functions use to position a string on screen. When you call `tft.drawString("Hello", x, y)`, the coordinates `x` and `y` don't refer to the top-left corner of the text by default — they refer to whatever datum is currently active. `TL_DATUM` (top-left) is the default, so in the default state `x, y` is the top-left corner of the first character. Switching to `MC_DATUM` (middle-centre) makes `x, y` the geometric centre of the rendered string, which is ideal for centring labels inside buttons or panel headings. You set the active datum with `setTextDatum()` and read it back with `getTextDatum()`.

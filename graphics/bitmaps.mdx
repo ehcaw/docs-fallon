@@ -1,5 +1,5 @@
 ---
-title: "Drawing Bitmaps and Images on TFT Displays"
+title: "Drawing Bitmaps and Images on TFT Displays with TFT_eSPI"
 sidebarTitle: "Bitmaps"
 description: "Draw monochrome PROGMEM bitmaps, XBM images, and full-color RGB565 pixel arrays on TFT displays using TFT_eSPI's drawBitmap, drawXBitmap, and pushImage."
 ---
@@ -241,6 +241,32 @@ tft.pushRect(100, 100, 32, 32, saved);    // Restore the background
 <Warning>
 `readRect` requires the display controller to support pixel read-back over SPI. Not all TFT controllers or wiring configurations support this, and it is significantly slower than write operations regardless.
 </Warning>
+
+---
+
+## Bitmap Color Helper
+
+### `setBitmapColor`
+
+Set the default foreground and background colors used by `drawBitmap()` and `drawXBitmap()`. This is an alternative to passing colors on every individual draw call — useful when you need to draw the same icon in different color schemes.
+
+```cpp
+void setBitmapColor(uint16_t fgcolor, uint16_t bgcolor);
+```
+
+<ParamField path="fgcolor" type="uint16_t" required>Color applied to `1`-bits.</ParamField>
+<ParamField path="bgcolor" type="uint16_t" required>Color applied to `0`-bits.</ParamField>
+
+```cpp setBitmapColor.ino
+// Set default colors once, then draw multiple icons without repeating color args
+tft.setBitmapColor(TFT_GREEN, TFT_BLACK);
+tft.drawBitmap(10, 10, icon1, 16, 16, TFT_GREEN);   // explicit color still takes priority
+tft.drawBitmap(40, 10, icon2, 16, 16, TFT_GREEN);
+```
+
+<Note>
+When you pass explicit color arguments to `drawBitmap()` or `drawXBitmap()`, those arguments always take priority over the colors set by `setBitmapColor()`.
+</Note>
 
 ---
 

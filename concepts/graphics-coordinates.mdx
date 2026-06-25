@@ -1,7 +1,7 @@
 ---
 title: "TFT_eSPI Pixel Coordinate System and Screen Dimensions"
 sidebarTitle: "Coordinates"
-description: "Understand TFT_eSPI's pixel coordinate system, how rotation remaps width and height, viewport clipping regions, and how to write rotation-agnostic layout code."
+description: "Understand TFT_eSPI's pixel coordinate system, how rotation remaps width and height, and how to use viewports and dimension helpers in your sketches."
 ---
 
 Every pixel you draw in TFT_eSPI is addressed through a straightforward two-dimensional coordinate system anchored to the top-left corner of the display. Understanding how that system works — and how it shifts when you rotate the screen — is essential for writing layout code that adapts cleanly across different display orientations and sizes.
@@ -112,7 +112,7 @@ tft.resetViewport();
 ```
 
 <Note>
-  `width()` and `height()` always reflect the **full screen** dimensions even when a viewport is active. Use `getViewportWidth()` and `getViewportHeight()` to query the active viewport size when laying out content within it.
+  The behavior of `width()` and `height()` depends on how the viewport was created. When `vpDatum = true` (the default), both methods return the **viewport dimensions** rather than the full screen size. When `vpDatum = false`, they continue to return the full screen dimensions. Use `getViewportWidth()` and `getViewportHeight()` to always retrieve the viewport size regardless of the datum setting.
 </Note>
 
 ## Out-of-Bounds Coordinates
